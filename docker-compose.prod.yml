@@ -1,0 +1,99 @@
+# ══════════════════════════════════════════════════════════════
+#  PRISM — Production Docker Compose
+#  All 4 services on a single EC2 instance
+#  
+#  Usage:
+#    docker compose -f docker-compose.prod.yml up -d --build
+#    docker compose -f docker-compose.prod.yml ps
+#    docker compose -f docker-compose.prod.yml logs -f
+# ══════════════════════════════════════════════════════════════
+
+version: "3.9"
+
+services:
+  # ── TheQuantSoft Landing Page (:4000) ──
+  landing:
+    build:
+      context: .
+      dockerfile: Dockerfile.landing
+    container_name: prism-landing
+    restart: unless-stopped
+    env_file: ./thequantsoft/.env
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - prism-net
+
+  # ── PRISM Frontend — Next.js (:3000) ──
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: prism-frontend
+    restart: unless-stopped
+    environment:
+      - NEXT_PUBLIC_API_URL=https://api.thequantsoft.co.in
+      - NEXT_PUBLIC_LANDING_URL=https://thequantsoft.co.in
+      - NEXT_PUBLIC_LIVE_API=false
+      - NEXT_PUBLIC_STREAMING=false
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - prism-net
+
+  # ── PRISM Backend — FastAPI (:8000) ──
+  backend:
+    build:
+      context: ../prism-analyst-services
+      dockerfile: Dockerfile
+    container_name: prism-backend
+    restart: unless-stopped
+    env_file: ../prism-analyst-services/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      # AWS RDS SSL certificate bundle
+      - ../prism-analyst-services/global-bundle.pem:/app/global-bundle.pem:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - prism-net
+
+  # ── Nginx Reverse Proxy (:80/:443) ──
+  nginx:
+    image: nginx:alpine
+    container_name: prism-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/www:/var/www/certbot:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      landing:
+        condition: service_started
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_started
+    networks:
+      - prism-net
+
+networks:
+  prism-net:
+    driver: bridge

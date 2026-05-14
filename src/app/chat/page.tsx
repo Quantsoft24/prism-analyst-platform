@@ -1,0 +1,126 @@
+"use client";
+
+import { useState, useCallback } from "react";
+import { RECENT_CHAT_QUERIES, type NavView } from "@/lib/mockData";
+import { useChat } from "@/hooks/useChat";
+import { useToast } from "@/components/Toast";
+import AppShell from "@/components/AppShell";
+import SearchModal from "@/components/SearchModal";
+import AskScreen from "./components/AskScreen";
+import ChatLayout from "./components/ChatLayout";
+import DashboardView from "../dashboard/components/DashboardView";
+import ReportsView from "../reports/components/ReportsView";
+import SettingsView from "../settings/components/SettingsView";
+
+export default function ChatPage() {
+  const [activeView, setActiveView] = useState<NavView>("chat");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const chat = useChat();
+  const { toast } = useToast();
+
+  /* Handle sending a query — always switches to chat */
+  const handleSend = useCallback((query: string) => {
+    setActiveView("chat");
+    chat.send(query);
+    toast("Research started — running tools…", "info");
+  }, [chat, toast]);
+
+  /* New research — reset to ask screen */
+  const handleNewResearch = useCallback(() => {
+    setActiveView("chat");
+    chat.reset();
+  }, [chat]);
+
+  /* Recent chat click */
+  const handleRecentChat = useCallback((id: string) => {
+    const query = RECENT_CHAT_QUERIES[id];
+    if (query) {
+      setActiveView("chat");
+      chat.send(query);
+      toast("Resuming research…", "info");
+    }
+  }, [chat, toast]);
+
+  /* Navigation */
+  const handleNavigate = useCallback((view: NavView) => {
+    setActiveView(view);
+  }, []);
+
+  /* Quick prompt from dashboard */
+  const handleQuickPrompt = useCallback((query: string) => {
+    setActiveView("chat");
+    chat.send(query);
+    toast("Research started — running tools…", "info");
+  }, [chat, toast]);
+
+  /* Report click — map intent key to query */
+  const handleReportClick = useCallback((intentKey: string) => {
+    const query = RECENT_CHAT_QUERIES[intentKey];
+    if (query) {
+      setActiveView("chat");
+      chat.send(query);
+      toast("Loading report context…", "info");
+    }
+  }, [chat, toast]);
+
+  /* Search modal */
+  const handleSearchSelect = useCallback((action: string) => {
+    setActiveView("chat");
+    chat.send(action);
+    toast("Research started — running tools…", "info");
+  }, [chat, toast]);
+
+  /* Keyboard: ⌘K to open search */
+  const handleSearchOpen = useCallback(() => {
+    setSearchOpen(true);
+  }, []);
+
+  /* Render the active view */
+  const renderView = () => {
+    switch (activeView) {
+      case "dashboard":
+        return <DashboardView onQuickPrompt={handleQuickPrompt} />;
+
+      case "reports":
+        return <ReportsView onReportClick={handleReportClick} />;
+
+      case "settings":
+        return <SettingsView />;
+
+      case "chat":
+      default:
+        if (chat.phase === "idle") {
+          return <AskScreen onSend={handleSend} />;
+        }
+        return chat.intentConfig ? (
+          <ChatLayout
+            messages={chat.messages}
+            intentConfig={chat.intentConfig}
+            showWorkspace={chat.showWorkspace}
+            phase={chat.phase}
+            onFollowUp={chat.followUp}
+          />
+        ) : null;
+    }
+  };
+
+  return (
+    <>
+      <AppShell
+        activeView={activeView}
+        onNavigate={handleNavigate}
+        onNewResearch={handleNewResearch}
+        onRecentChat={handleRecentChat}
+        onSearchOpen={handleSearchOpen}
+      >
+        {renderView()}
+      </AppShell>
+
+      <SearchModal
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onSelect={handleSearchSelect}
+      />
+    </>
+  );
+}

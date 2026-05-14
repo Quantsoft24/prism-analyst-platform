@@ -1,0 +1,90 @@
+.toastContainer {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  background: var(--ink);
+  color: var(--bg-elev);
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  animation: toastSlideIn 0.3s ease, toastFadeOut 0.4s ease 3.1s forwards;
+  max-width: 360px;
+  line-height: 1.4;
+}
+
+.icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* ── Type variants ── */
+.success {
+  background: var(--pos);
+  color: #fff;
+}
+
+.info {
+  background: var(--ink);
+  color: var(--bg-elev);
+}
+
+.warning {
+  background: var(--warn);
+  color: #fff;
+}
+
+.error {
+  background: var(--neg);
+  color: #fff;
+}
+
+/* ── Animations ── */
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes toastFadeOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+}
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+  .toastContainer {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+  }
+
+  .toast {
+    max-width: none;
+  }
+}

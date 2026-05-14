@@ -1,0 +1,175 @@
+/* ══════════════════════════════════════════════════
+   Topbar — Top navigation bar
+   ══════════════════════════════════════════════════ */
+
+.topbar {
+  height: var(--topbar-height);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elev);
+  flex-shrink: 0;
+}
+
+/* ── Hamburger (mobile only) ── */
+.hamburger {
+  display: none;
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  place-items: center;
+}
+
+.hamburger svg {
+  width: 18px;
+  height: 18px;
+}
+
+@media (max-width: 900px) {
+  .hamburger {
+    display: grid;
+  }
+}
+
+/* ── Breadcrumbs ── */
+.breadcrumbs {
+  font-size: 12px;
+  color: var(--ink-mute);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.breadcrumbs span:last-child {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.breadSep {
+  opacity: 0.4;
+}
+
+/* ── Search ── */
+.searchBar {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-tint);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  max-width: 280px;
+  flex: 1;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  cursor: pointer;
+}
+
+.searchBar:hover {
+  border-color: var(--ink-faint);
+}
+
+.searchPlaceholder {
+  flex: 1;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.searchBar svg {
+  width: 14px;
+  height: 14px;
+  color: var(--ink-faint);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 12px;
+  color: var(--ink);
+  font-family: inherit;
+}
+
+.searchInput::placeholder {
+  color: var(--ink-faint);
+}
+
+.searchKbd {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--ink-faint);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 4px;
+  flex-shrink: 0;
+}
+
+/* ── Action buttons ── */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.actionBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: var(--ink-soft);
+  background: none;
+  position: relative;
+  transition: all var(--transition-fast);
+}
+
+.actionBtn:hover {
+  background: var(--bg-tint);
+  color: var(--ink);
+}
+
+.actionBtn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.notifDot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  background: var(--neg);
+  border-radius: 50%;
+  border: 1.5px solid var(--bg-elev);
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .topbar {
+    padding: 0 14px;
+    gap: 8px;
+  }
+
+  .searchBar {
+    max-width: 160px;
+  }
+
+  .searchKbd {
+    display: none;
+  }
+
+  .breadcrumbs {
+    display: none;
+  }
+}

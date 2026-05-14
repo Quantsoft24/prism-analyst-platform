@@ -1,0 +1,75 @@
+name: 🚀 Deploy Frontend to Production
+
+on:
+  push:
+    branches: [production]
+
+concurrency:
+  group: deploy-frontend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+
+    steps:
+      - name: 🔐 Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+
+            echo "═══════════════════════════════════════════"
+            echo "  PRISM Frontend — Production Deployment"
+            echo "═══════════════════════════════════════════"
+
+            cd ~/PRISM/prism-analyst-platform
+
+            echo "📥 Pulling latest production code..."
+            git fetch origin production
+            git checkout production
+            git pull origin production
+
+            echo "🔨 Building Docker images..."
+            docker compose -f docker-compose.prod.yml build --no-cache frontend
+            docker compose -f docker-compose.prod.yml build landing
+
+            echo "🚀 Restarting services..."
+            docker compose -f docker-compose.prod.yml up -d frontend landing nginx
+
+            echo "⏳ Waiting for health check..."
+            sleep 5
+
+            echo "🩺 Verifying services..."
+            docker compose -f docker-compose.prod.yml ps
+
+            # Verify frontend responds
+            if curl -sf -o /dev/null http://localhost:3000/chat; then
+              echo "✅ Frontend is healthy"
+            else
+              echo "❌ Frontend health check failed!"
+              docker compose -f docker-compose.prod.yml logs frontend --tail 30
+              exit 1
+            fi
+
+            # Verify landing responds
+            if curl -sf -o /dev/null http://localhost:4000; then
+              echo "✅ Landing page is healthy"
+            else
+              echo "⚠️ Landing page health check failed (non-critical)"
+            fi
+
+            echo "🧹 Cleaning old images..."
+            docker image prune -f
+
+            echo ""
+            echo "═══════════════════════════════════════════"
+            echo "  ✅ Frontend deployment complete!"
+            echo "═══════════════════════════════════════════"

@@ -1,0 +1,722 @@
+.chatLayout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100%;
+  overflow: hidden;
+}
+
+.chatPane {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.chatHeader {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.chatTitle {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.chatStatus {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-mute);
+}
+
+.statusPulse {
+  width: 6px;
+  height: 6px;
+  background: var(--pos);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Mode Banner ── */
+.modeBanner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--bg-tint);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--ink-mute);
+  animation: fadeUp 0.3s ease;
+}
+
+.modeBanner svg {
+  flex-shrink: 0;
+  color: var(--ink-faint);
+}
+
+/* ── Message Role Header ── */
+.msgRole {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-mute);
+  margin-bottom: 8px;
+}
+
+.msgRoleIconUser {
+  width: 24px;
+  height: 24px;
+  background: var(--accent);
+  color: white;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.msgRoleIconAssistant {
+  width: 24px;
+  height: 24px;
+  background: var(--ink);
+  color: var(--accent);
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  font-style: italic;
+  flex-shrink: 0;
+}
+
+.msgRoleInfo {
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+/* ── User Message ── */
+.msgUser {
+  animation: fadeUp 0.3s ease;
+}
+
+.msgUserBody {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+/* ── Assistant Message ── */
+.msgAssistant {
+  animation: fadeUp 0.3s ease;
+}
+
+.msgBodyText {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+  margin-top: 14px;
+  animation: fadeUp 0.4s ease;
+}
+
+.streamCursor {
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  background: var(--accent);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink 0.6s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.msgBodyText strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.msgBodyThinking {
+  font-size: 13px;
+  color: var(--ink-mute);
+  font-style: italic;
+  margin-top: 8px;
+  animation: fadeUp 0.3s ease;
+}
+
+/* ── Thinking Dots ── */
+.thinking {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 4px;
+}
+
+.thinkingDot {
+  width: 5px;
+  height: 5px;
+  background: var(--ink-faint);
+  border-radius: 50%;
+  display: inline-block;
+  animation: bounce 1.4s ease-in-out infinite both;
+}
+
+.thinkingDot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.thinkingDot:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+/* ── Tool Calls ── */
+.toolCalls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.toolCall {
+  background: var(--bg-tint);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  animation: fadeUp 0.3s ease;
+  overflow: hidden;
+}
+
+.toolCall:hover {
+  background: var(--bg-sunken);
+}
+
+.toolCallHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.toolCallIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.toolCallDone {
+  color: var(--pos);
+}
+
+.toolCallRunning {
+  color: var(--accent);
+  animation: spin 1s linear infinite;
+}
+
+.toolCallMeta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolCallName {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+
+.toolCallStatus {
+  color: var(--ink-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.toolCallTime {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+  flex-shrink: 0;
+}
+
+.toolCallChevron {
+  width: 14px;
+  height: 14px;
+  color: var(--ink-faint);
+  transition: transform var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.toolCallExpanded .toolCallChevron {
+  transform: rotate(90deg);
+}
+
+/* ── Tool Call Body (expand) ── */
+.toolCallBody {
+  padding: 0 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: fadeUp 0.2s ease;
+}
+
+.toolCallSection {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.toolCallLabel {
+  color: var(--ink-mute);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  width: 48px;
+}
+
+.toolCallValue {
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.key {
+  color: var(--accent);
+}
+
+/* ── Citations ── */
+.cite {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  vertical-align: super;
+  margin: 0 1px;
+  padding: 0 3px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.cite:hover {
+  background: var(--accent);
+  color: white;
+}
+
+/* ── Follow-up Composer ── */
+.followUpComposer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.followUpInput {
+  flex: 1;
+  background: var(--bg-tint);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.followUpInput::placeholder {
+  color: var(--ink-faint);
+}
+
+.followUpInput:focus {
+  border-color: var(--accent);
+}
+
+.followUpInput:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.followUpTags {
+  display: flex;
+  gap: 4px;
+}
+
+.followUpTag {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.followUpSendBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--bg-elev);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.followUpSendBtn:hover {
+  transform: translateY(-1px);
+}
+
+.followUpSendBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.followUpSendBtn:disabled:hover {
+  transform: none;
+}
+
+.followUpSendBtn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ── Workspace Pane ── */
+.workspacePane {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  animation: slideInRight 0.4s ease;
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.workspaceHeader {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.workspaceTabs {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.workspaceTab {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-mute);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.workspaceTab:hover {
+  color: var(--ink);
+  background: var(--bg-tint);
+}
+
+.workspaceTabActive {
+  composes: workspaceTab;
+  background: var(--bg-elev);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+.workspaceActions {
+  display: flex;
+  gap: 4px;
+}
+
+.workspaceActionBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.workspaceActionBtn:hover {
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+
+.workspaceActionBtn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.workspaceContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* ── Report Section ── */
+.reportSection {
+  margin-bottom: 24px;
+  animation: fadeUp 0.4s ease;
+}
+
+.reportTitle {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.reportMeta {
+  font-size: 12px;
+  color: var(--ink-mute);
+  margin-bottom: 16px;
+  display: flex;
+  gap: 16px;
+}
+
+.reportBadge {
+  display: inline-flex;
+  padding: 2px 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* ── KPI Grid ── */
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.kpiCard {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  animation: fadeUp 0.4s ease;
+}
+
+.kpiLabel {
+  font-size: 11px;
+  color: var(--ink-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.kpiValue {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 4px;
+}
+
+.kpiDeltaPos {
+  font-size: 12px;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  color: var(--pos);
+}
+
+.kpiDeltaNeg {
+  font-size: 12px;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  color: var(--neg);
+}
+
+/* ── Chart ── */
+.chartContainer {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.chartTitle {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+.chartSvg {
+  width: 100%;
+  height: 140px;
+}
+
+/* ── Sources ── */
+.sourceList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sourceItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.sourceItem:hover {
+  border-color: var(--accent);
+}
+
+.sourceNum {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.sourceTitle {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.sourceMeta {
+  color: var(--ink-mute);
+}
+
+/* ── Pane Switcher (mobile) ── */
+.paneSwitcher {
+  display: none;
+  padding: 8px 20px;
+  gap: 4px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+}
+
+.paneSwitcherBtn {
+  flex: 1;
+  padding: 8px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-mute);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.paneSwitcherBtnActive {
+  composes: paneSwitcherBtn;
+  background: var(--ink);
+  color: var(--bg-elev);
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .chatLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .workspacePane {
+    display: none;
+  }
+
+  .workspacePaneVisible {
+    display: flex;
+  }
+
+  .chatPane {
+    border-right: none;
+  }
+
+  .chatPaneHidden {
+    display: none;
+  }
+
+  .paneSwitcher {
+    display: flex;
+  }
+
+  .kpiGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .messages {
+    padding: 14px;
+  }
+
+  .followUpComposer {
+    padding: 10px 14px;
+  }
+
+  .kpiGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .followUpTags {
+    display: none;
+  }
+}

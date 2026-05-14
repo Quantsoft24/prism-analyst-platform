@@ -1,0 +1,329 @@
+.settingsView {
+  padding: 24px;
+  overflow-y: auto;
+  height: 100%;
+  animation: fadeUp 0.3s ease;
+}
+
+/* ── Hero ── */
+.hero {
+  background:
+    radial-gradient(ellipse 600px 300px at 80% 50%, var(--accent-soft) 0%, transparent 60%),
+    var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  padding: 22px 28px;
+  margin-bottom: 18px;
+  position: relative;
+  overflow: hidden;
+}
+
+.heroEyebrow {
+  font-size: 11px;
+  color: var(--ink-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 10px;
+}
+
+.heroTitle {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.heroDesc {
+  font-size: 14px;
+  color: var(--ink-soft);
+  margin-bottom: 0;
+  line-height: 1.6;
+}
+
+/* ── Layout ── */
+.settingsLayout {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 30px;
+}
+
+/* ── Nav ── */
+.settingsNav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 0;
+}
+
+.settingsNavItem {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-radius: 6px;
+  border: none;
+  border-left: 2px solid transparent;
+  background: none;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.settingsNavItem:hover {
+  color: var(--ink);
+}
+
+.settingsNavItemActive {
+  composes: settingsNavItem;
+  color: var(--ink);
+  border-left-color: var(--accent);
+  font-weight: 600;
+  background: var(--bg-tint);
+}
+
+/* ── Section ── */
+.settingsSection {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.settingsSection h3 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin-bottom: 4px;
+}
+
+.sectionDesc {
+  font-size: 13px;
+  color: var(--ink-mute);
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+
+/* ── Setting Row ── */
+.settingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.settingRow:last-child {
+  border-bottom: none;
+}
+
+.settingInfo {
+  flex: 1;
+}
+
+.settingLabel {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.settingDesc {
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+
+/* ── Toggle Switch ── */
+.toggle {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  background: var(--line);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: var(--bg-elev);
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: var(--shadow-sm);
+}
+
+.toggleOn {
+  background: var(--ink);
+}
+
+.toggleOn::after {
+  transform: translateX(16px);
+}
+
+/* ── Tool Toggle Row ── */
+.toolToggleRow {
+  display: grid;
+  grid-template-columns: 30px 1fr 80px 50px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line-soft);
+  gap: 12px;
+}
+
+.toolToggleRow:last-child {
+  border-bottom: none;
+}
+
+.toolToggleNum {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+}
+
+.toolToggleName {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.toolToggleDesc {
+  font-size: 11px;
+  color: var(--ink-mute);
+  margin-top: 1px;
+}
+
+.toolToggleStatus {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.statusActive {
+  color: var(--pos);
+}
+
+.statusInactive {
+  color: var(--ink-mute);
+}
+
+.statusBeta {
+  color: var(--warn);
+}
+
+/* ── Select ── */
+.select {
+  background: var(--bg-tint);
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* ── Edit Button ── */
+.editBtn {
+  background: var(--bg-tint);
+  border: 1px solid var(--line);
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.editBtn:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+/* ── Badge ── */
+.badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+}
+
+/* ── Responsive ── */
+@media (max-width: 1100px) {
+  .settingsLayout {
+    grid-template-columns: 180px 1fr;
+    gap: 20px;
+  }
+}
+
+@media (max-width: 900px) {
+  .settingsLayout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .settingsNav {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 4px;
+    padding-bottom: 4px;
+    position: static;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .settingsNavItem {
+    white-space: nowrap;
+    flex-shrink: 0;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+  }
+
+  .settingsNavItemActive {
+    border-left-color: transparent;
+    border-bottom-color: var(--accent);
+    background: transparent;
+  }
+}
+
+@media (max-width: 640px) {
+  .settingsView {
+    padding: 16px;
+  }
+
+  .settingsSection {
+    padding: 18px;
+  }
+
+  .toolToggleRow {
+    grid-template-columns: 28px 1fr 50px;
+    gap: 10px;
+  }
+
+  .toolToggleStatus {
+    display: none;
+  }
+
+  .toolToggleDesc {
+    display: none;
+  }
+
+  .heroTitle {
+    font-size: 22px;
+  }
+}

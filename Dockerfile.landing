@@ -1,0 +1,13 @@
+# ── TheQuantSoft Landing Page ──
+FROM node:20-alpine
+WORKDIR /app
+
+COPY thequantsoft/package.json ./
+RUN npm install --production
+
+COPY thequantsoft/ ./
+
+EXPOSE 4000
+ENV PORT=4000
+
+CMD ["node", "server.js"]
