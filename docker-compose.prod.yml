@@ -8,9 +8,8 @@
 #    docker compose -f docker-compose.prod.yml logs -f
 # ══════════════════════════════════════════════════════════════
 
-version: "3.9"
-
 services:
+
   # ── TheQuantSoft Landing Page (:4000) ──
   landing:
     build:

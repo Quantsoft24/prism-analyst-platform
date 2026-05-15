@@ -1,0 +1,10 @@
+{
+  "name": "PRISM",
+  "short_name": "PRISM",
+  "description": "AI Equity Research Platform",
+  "icons": [],
+  "start_url": "/chat",
+  "display": "standalone",
+  "theme_color": "#8B6914",
+  "background_color": "#0D0D0F"
+}
