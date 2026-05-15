@@ -113,7 +113,7 @@ sudo certbot certonly --webroot -w /var/www/certbot \
 ssh -i prism-analyst.pem ubuntu@15.207.146.145
 
 # Clone repos
-mkdir ~/prism && cd ~/prism
+mkdir ~/PRISM && cd ~/PRISM
 git clone https://github.com/Quantsoft24/prism-analyst-platform.git
 git clone https://github.com/Quantsoft24/prism-analyst-services.git
 
