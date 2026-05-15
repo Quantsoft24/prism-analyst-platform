@@ -1,7 +1,7 @@
 # ══════════════════════════════════════════════════════════════
 #  PRISM — Production Docker Compose
 #  All 4 services on a single EC2 instance
-#  
+#
 #  Usage:
 #    docker compose -f docker-compose.prod.yml up -d --build
 #    docker compose -f docker-compose.prod.yml ps
@@ -52,6 +52,14 @@ services:
       - prism-net
 
   # ── PRISM Backend — FastAPI (:8000) ──
+  #
+  # Database is OPTIONAL. The backend runs fine without it
+  # (health check + mock data only). When you add a database:
+  #   1. Update ../prism-analyst-services/.env with DB_HOST, DB_PASSWORD etc.
+  #   2. If using AWS RDS with SSL, uncomment the volumes section below
+  #      and place global-bundle.pem in the backend repo root.
+  #   3. Restart: docker compose -f docker-compose.prod.yml up -d backend
+  #
   backend:
     build:
       context: ../prism-analyst-services
@@ -61,9 +69,9 @@ services:
     env_file: ../prism-analyst-services/.env
     ports:
       - "8000:8000"
-    volumes:
-      # AWS RDS SSL certificate bundle
-      - ../prism-analyst-services/global-bundle.pem:/app/global-bundle.pem:ro
+    # ── Uncomment when database with SSL is configured ──
+    # volumes:
+    #   - ../prism-analyst-services/global-bundle.pem:/app/global-bundle.pem:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
