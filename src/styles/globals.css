@@ -1,3 +1,7 @@
+/* Tailwind utilities are pulled in via tailwind.css, which binds the framework's
+ * theme tokens to the CSS variables defined below — see src/styles/tailwind.css. */
+@import "./tailwind.css";
+
 :root {
   --bg: #F4F4F1;
   --bg-elev: #FFFFFF;

@@ -1,15 +1,23 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
-import { routeIntent, INTENT_CONFIGS, type IntentConfig, type IntentType, type ToolCall } from "@/lib/mockData";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-/* ── Chat simulation phases ── */
-type Phase =
-  | "idle"           // Ask screen
-  | "thinking"       // Dots showing, agent "working"
-  | "tools"          // Tool calls appearing one by one
-  | "answering"      // Answer text streaming in
-  | "done";          // Complete
+import {
+  runChatStream,
+  type ChatStreamHandle,
+  type ToolCallEvent,
+} from "@/lib/api/chat";
+import {
+  INTENT_CONFIGS,
+  routeIntent,
+  type IntentConfig,
+  type IntentType,
+  type ToolCall,
+} from "@/lib/mockData";
+
+/* ── Chat phase machine — preserved from the mock implementation so
+ * ChatLayout (which switches on these strings) doesn't have to change. */
+type Phase = "idle" | "thinking" | "tools" | "answering" | "done";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -33,14 +41,19 @@ interface UseChatReturn {
 }
 
 /**
- * useChat — Simulates the agentic research flow
+ * useChat — drives a real agentic chat conversation against
+ * ``POST /api/v1/chat/run``.
  *
- * Timeline (matching Lakshya mockup):
- * 0ms      — User message appears, thinking dots shown
- * 600ms    — Workspace pane slides in
- * 1100ms   — First tool call appears
- * +400ms   — Each subsequent tool call appears
- * +600ms   — After last tool, answer text fades in
+ * The public interface matches the mock implementation that preceded it,
+ * so ``ChatLayout`` is unchanged. Internally:
+ *   * ``send()`` opens a fresh SSE stream and starts a new ADK session.
+ *   * ``followUp()`` re-opens a stream against the SAME session_id so the
+ *     agent retains context.
+ *   * ``intentConfig`` is *synthesized* on the fly from streaming events
+ *     instead of read from the static INTENT_CONFIGS map — only the
+ *     ``contextTag`` and ``tabs`` are still seeded from intent classification
+ *     so the workspace pane has sensible tabs.
+ *   * Aborts in flight on unmount or when ``send`` is called again.
  */
 export function useChat(): UseChatReturn {
   const [phase, setPhase] = useState<Phase>("idle");
@@ -48,158 +61,235 @@ export function useChat(): UseChatReturn {
   const [activeIntent, setActiveIntent] = useState<IntentType | null>(null);
   const [intentConfig, setIntentConfig] = useState<IntentConfig | null>(null);
   const [showWorkspace, setShowWorkspace] = useState(false);
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const sessionIdRef = useRef<string | null>(null);
+  const streamRef = useRef<ChatStreamHandle | null>(null);
+  // call_id → index into the assistant message's toolCalls array, so we can
+  // update the matching ToolCall when its tool_result arrives.
+  const toolCallIndexRef = useRef<Map<string, number>>(new Map());
 
-  /* Clean up timers on unmount */
+  // Abort any in-flight stream on unmount.
   useEffect(() => {
     return () => {
-      timersRef.current.forEach(clearTimeout);
+      streamRef.current?.abort();
     };
   }, []);
 
-  const clearTimers = useCallback(() => {
-    timersRef.current.forEach(clearTimeout);
-    timersRef.current = [];
+  const cancelInflight = useCallback(() => {
+    streamRef.current?.abort();
+    streamRef.current = null;
+    toolCallIndexRef.current.clear();
   }, []);
 
-  const addTimer = useCallback((fn: () => void, ms: number) => {
-    const id = setTimeout(fn, ms);
-    timersRef.current.push(id);
-    return id;
-  }, []);
+  /**
+   * Internal: open an SSE stream and wire its events into chat state.
+   * Used by both ``send`` (new conversation) and ``followUp`` (same session).
+   */
+  const startStream = useCallback(
+    (query: string, isFollowUp: boolean) => {
+      cancelInflight();
 
-  /* ── Send a query ── */
-  const send = useCallback((query: string) => {
-    clearTimers();
+      // Classify intent — used only to pick the workspace tabs + contextTag.
+      // The answer comes from the backend, not from INTENT_CONFIGS.
+      const intent = routeIntent(query);
+      const intentBase = INTENT_CONFIGS[intent];
+      setActiveIntent(intent);
 
-    const intent = routeIntent(query);
-    const config = INTENT_CONFIGS[intent];
-    setActiveIntent(intent);
-    setIntentConfig(config);
+      // Build a synthetic IntentConfig that will grow as tool_call events
+      // arrive. We seed empty tools and an empty answer — they get filled
+      // by the SSE handlers.
+      const liveConfig: IntentConfig = {
+        title: deriveTitle(query),
+        statusMsg: "Live · running 0 tools",
+        tools: [],
+        answer: "",
+        contextTag: intentBase.contextTag,
+        tabs: intentBase.tabs,
+      };
+      setIntentConfig(liveConfig);
 
-    // Phase 1: User message + thinking dots
-    setPhase("thinking");
-    setShowWorkspace(false);
-    setMessages([
-      { role: "user", text: query },
-      { role: "assistant", text: "", isThinking: true, toolCalls: config.tools, visibleToolCount: 0, showAnswer: false },
-    ]);
+      // Seed the message list with the user message + a "thinking" assistant.
+      if (isFollowUp) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "user", text: query },
+          {
+            role: "assistant",
+            text: "",
+            isThinking: true,
+            toolCalls: [],
+            visibleToolCount: 0,
+            showAnswer: false,
+            streamedText: "",
+          },
+        ]);
+      } else {
+        setMessages([
+          { role: "user", text: query },
+          {
+            role: "assistant",
+            text: "",
+            isThinking: true,
+            toolCalls: [],
+            visibleToolCount: 0,
+            showAnswer: false,
+            streamedText: "",
+          },
+        ]);
+        setShowWorkspace(false);
+      }
+      setPhase("thinking");
 
-    // Phase 2: Show workspace pane (600ms)
-    addTimer(() => {
-      setShowWorkspace(true);
-    }, 600);
+      // Reveal workspace once the stream actually starts producing.
+      // We delay slightly so the "thinking" state is visible — matches the
+      // prior UX without depending on setTimeout for correctness.
+      const workspaceReveal = setTimeout(() => setShowWorkspace(true), 300);
 
-    // Phase 3: Start showing tool calls one by one (1100ms + 400ms each)
-    addTimer(() => {
-      setPhase("tools");
-    }, 1100);
+      streamRef.current = runChatStream(
+        {
+          message: query,
+          session_id: sessionIdRef.current,
+        },
+        {
+          onMeta: (event) => {
+            sessionIdRef.current = event.session_id;
+          },
+          onToolCall: (event) => {
+            setPhase("tools");
+            const toolCall: ToolCall = {
+              name: event.tool,
+              status: formatToolArgs(event),
+              time: "running",
+              running: true,
+            };
+            setMessages((prev) => updateLastAssistant(prev, (msg) => {
+              const tools = [...(msg.toolCalls ?? []), toolCall];
+              toolCallIndexRef.current.set(event.call_id, tools.length - 1);
+              return {
+                ...msg,
+                isThinking: false,
+                toolCalls: tools,
+                visibleToolCount: tools.length,
+              };
+            }));
+          },
+          onToolResult: (event) => {
+            setMessages((prev) => updateLastAssistant(prev, (msg) => {
+              const idx = toolCallIndexRef.current.get(event.call_id);
+              if (idx === undefined || !msg.toolCalls) return msg;
+              const tools = msg.toolCalls.slice();
+              tools[idx] = {
+                ...tools[idx],
+                status: event.ok
+                  ? (event.result_summary ?? "ok")
+                  : `error: ${event.error ?? "unknown"}`,
+                time: `${event.latency_ms}ms`,
+                running: false,
+              };
+              return { ...msg, toolCalls: tools };
+            }));
+          },
+          onToken: (event) => {
+            setPhase((p) => (p === "thinking" ? "answering" : p === "tools" ? "answering" : p));
+            setMessages((prev) => updateLastAssistant(prev, (msg) => ({
+              ...msg,
+              isThinking: false,
+              showAnswer: true,
+              streamedText: (msg.streamedText ?? "") + event.text,
+            })));
+          },
+          onFinal: (event) => {
+            setPhase("done");
+            setMessages((prev) => updateLastAssistant(prev, (msg) => ({
+              ...msg,
+              isThinking: false,
+              showAnswer: true,
+              text: event.answer,
+              streamedText: event.answer,
+            })));
+          },
+          onError: (event) => {
+            setPhase("done");
+            const friendly =
+              event.code === "timeout"
+                ? "The agent took too long to respond. Try a shorter question."
+                : `Something went wrong: ${event.message}`;
+            setMessages((prev) => updateLastAssistant(prev, (msg) => ({
+              ...msg,
+              isThinking: false,
+              showAnswer: true,
+              text: friendly,
+              streamedText: friendly,
+            })));
+          },
+        },
+      );
 
-    config.tools.forEach((_, i) => {
-      addTimer(() => {
-        setMessages(prev => {
-          const updated = [...prev];
-          const assistantMsg = { ...updated[updated.length - 1] };
-          assistantMsg.visibleToolCount = i + 1;
-          assistantMsg.isThinking = false;
-          updated[updated.length - 1] = assistantMsg;
-          return updated;
-        });
-      }, 1100 + 400 * (i + 1));
-    });
+      // Cleanup the reveal timer if the stream finishes before it fires.
+      streamRef.current.done.finally(() => clearTimeout(workspaceReveal));
+    },
+    [cancelInflight],
+  );
 
-    // Phase 4: Show answer after all tools — stream word-by-word
-    const totalToolTime = 1100 + 400 * (config.tools.length + 1);
-    addTimer(() => {
-      setPhase("answering");
-      setMessages(prev => {
-        const updated = [...prev];
-        const assistantMsg = { ...updated[updated.length - 1] };
-        assistantMsg.showAnswer = true;
-        assistantMsg.streamedText = "";
-        updated[updated.length - 1] = assistantMsg;
-        return updated;
-      });
+  const send = useCallback(
+    (query: string) => {
+      // Fresh send = fresh session. Drop any prior session_id.
+      sessionIdRef.current = null;
+      startStream(query, false);
+    },
+    [startStream],
+  );
 
-      // Stream words one by one at ~30ms per word
-      const words = config.answer.split(/(\s+)/);
-      words.forEach((_, wi) => {
-        addTimer(() => {
-          setMessages(prev => {
-            const updated = [...prev];
-            const assistantMsg = { ...updated[updated.length - 1] };
-            assistantMsg.streamedText = words.slice(0, wi + 1).join("");
-            updated[updated.length - 1] = assistantMsg;
-            return updated;
-          });
-        }, 30 * (wi + 1));
-      });
+  const followUp = useCallback(
+    (query: string) => {
+      startStream(query, true);
+    },
+    [startStream],
+  );
 
-      // Phase 5: Done — after all words streamed
-      addTimer(() => {
-        setPhase("done");
-      }, 30 * words.length + 200);
-    }, totalToolTime);
-
-  }, [clearTimers, addTimer]);
-
-  /* ── Follow-up message ── */
-  const followUp = useCallback((query: string) => {
-    clearTimers();
-
-    // Add user message + thinking assistant
-    setMessages(prev => [
-      ...prev,
-      { role: "user", text: query },
-      { role: "assistant", text: "", isThinking: true },
-    ]);
-    setPhase("thinking");
-
-    // Simulate response after 1400ms — stream follow-up answer
-    addTimer(() => {
-      const followUpAnswer = "Got it. I've updated the workspace on the right with the additional detail you asked for. [1]";
-      setMessages(prev => {
-        const updated = [...prev];
-        const lastMsg = { ...updated[updated.length - 1] };
-        lastMsg.isThinking = false;
-        lastMsg.text = followUpAnswer;
-        lastMsg.showAnswer = true;
-        lastMsg.streamedText = "";
-        updated[updated.length - 1] = lastMsg;
-        return updated;
-      });
-      setPhase("answering");
-
-      // Stream words
-      const words = followUpAnswer.split(/(\s+)/);
-      words.forEach((_, wi) => {
-        addTimer(() => {
-          setMessages(prev => {
-            const updated = [...prev];
-            const lastMsg = { ...updated[updated.length - 1] };
-            lastMsg.streamedText = words.slice(0, wi + 1).join("");
-            updated[updated.length - 1] = lastMsg;
-            return updated;
-          });
-        }, 30 * (wi + 1));
-      });
-
-      addTimer(() => {
-        setPhase("done");
-      }, 30 * words.length + 200);
-    }, 1400);
-
-  }, [clearTimers, addTimer]);
-
-  /* ── Reset to ask screen ── */
   const reset = useCallback(() => {
-    clearTimers();
+    cancelInflight();
+    sessionIdRef.current = null;
     setPhase("idle");
     setMessages([]);
     setActiveIntent(null);
     setIntentConfig(null);
     setShowWorkspace(false);
-  }, [clearTimers]);
+  }, [cancelInflight]);
 
   return { phase, messages, intentConfig, activeIntent, showWorkspace, send, followUp, reset };
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────
+
+/** Mutate the last assistant message in-place via an updater function. */
+function updateLastAssistant(
+  messages: ChatMessage[],
+  update: (msg: ChatMessage) => ChatMessage,
+): ChatMessage[] {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "assistant") {
+      const next = messages.slice();
+      next[i] = update(messages[i]);
+      return next;
+    }
+  }
+  return messages;
+}
+
+/** Squeeze tool args into a short status line for the tool-call card. */
+function formatToolArgs(event: ToolCallEvent): string {
+  const entries = Object.entries(event.args);
+  if (entries.length === 0) return "running…";
+  return entries
+    .slice(0, 2)
+    .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+    .join(", ");
+}
+
+/** Derive a chat-header title from the first user query.
+ * Short truncation; the agent's final answer carries the real meaning. */
+function deriveTitle(query: string): string {
+  const trimmed = query.trim();
+  if (trimmed.length <= 60) return trimmed;
+  return trimmed.slice(0, 57) + "…";
 }

@@ -8,6 +8,7 @@ import AppShell from "@/components/AppShell";
 import SearchModal from "@/components/SearchModal";
 import AskScreen from "./components/AskScreen";
 import ChatLayout from "./components/ChatLayout";
+import CompaniesView from "../companies/components/CompaniesView";
 import DashboardView from "../dashboard/components/DashboardView";
 import ReportsView from "../reports/components/ReportsView";
 import SettingsView from "../settings/components/SettingsView";
@@ -75,11 +76,25 @@ export default function ChatPage() {
     setSearchOpen(true);
   }, []);
 
+  /* When the user clicks a company card, jump to chat with a research query
+     pre-loaded — bridges the company picker UX with the existing chat flow. */
+  const handleCompanySelect = useCallback(
+    (ticker: string) => {
+      setActiveView("chat");
+      chat.send(`Tell me about ${ticker} — latest filings, business model, and key metrics.`);
+      toast(`Loading research for ${ticker}…`, "info");
+    },
+    [chat, toast],
+  );
+
   /* Render the active view */
   const renderView = () => {
     switch (activeView) {
       case "dashboard":
         return <DashboardView onQuickPrompt={handleQuickPrompt} />;
+
+      case "companies":
+        return <CompaniesView onSelect={handleCompanySelect} />;
 
       case "reports":
         return <ReportsView onReportClick={handleReportClick} />;
