@@ -17,6 +17,8 @@ export interface ListCompaniesParams {
   exchange?: string;
   limit?: number;
   offset?: number;
+  // Index signature so this is assignable to the apiClient query param type.
+  [key: string]: string | number | boolean | null | undefined;
 }
 
 export const companiesApi = {
