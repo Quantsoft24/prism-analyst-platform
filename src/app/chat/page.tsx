@@ -9,18 +9,40 @@ import SearchModal from "@/components/SearchModal";
 import AskScreen from "./components/AskScreen";
 import ChatLayout from "./components/ChatLayout";
 import CompaniesView from "../companies/components/CompaniesView";
+import BMCView from "../bmc/components/BMCView";
 import DashboardView from "../dashboard/components/DashboardView";
 import ReportsView from "../reports/components/ReportsView";
 import SettingsView from "../settings/components/SettingsView";
 
+/** Recognize `@bmc TICKER` / "business model canvas of TICKER" in a query.
+ * Returns the ticker (uppercased) if the message is a BMC request, else null. */
+function parseBmcIntent(query: string): string | null {
+  const q = query.trim();
+  // @bmc TCS  |  @bmc TICKER
+  const at = q.match(/^@bmc\s+([A-Za-z0-9&.-]{1,32})\b/i);
+  if (at) return at[1].toUpperCase();
+  // "business model canvas of TCS" / "business model of TCS"
+  const phrase = q.match(/business model(?:\s+canvas)?\s+(?:of|for)\s+([A-Za-z0-9&.-]{1,32})\b/i);
+  if (phrase) return phrase[1].toUpperCase();
+  return null;
+}
+
 export default function ChatPage() {
   const [activeView, setActiveView] = useState<NavView>("chat");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [bmcTicker, setBmcTicker] = useState<string | null>(null);
   const chat = useChat();
   const { toast } = useToast();
 
-  /* Handle sending a query — always switches to chat */
+  /* Handle sending a query — routes BMC requests to the canvas, else chat */
   const handleSend = useCallback((query: string) => {
+    const bmc = parseBmcIntent(query);
+    if (bmc) {
+      setBmcTicker(bmc);
+      setActiveView("bmc");
+      toast(`Opening Business Model Canvas for ${bmc}…`, "info");
+      return;
+    }
     setActiveView("chat");
     chat.send(query);
     toast("Research started — running tools…", "info");
@@ -95,6 +117,9 @@ export default function ChatPage() {
 
       case "companies":
         return <CompaniesView onSelect={handleCompanySelect} />;
+
+      case "bmc":
+        return <BMCView initialTicker={bmcTicker} />;
 
       case "reports":
         return <ReportsView onReportClick={handleReportClick} />;
