@@ -47,12 +47,19 @@ echo ""
 
 # ── STEP 3: Create landing page .env ──
 echo "📝 STEP 3: Creating landing page .env..."
-cat > ~/PRISM/prism-analyst-platform/thequantsoft/.env << 'EOF'
+
+# Required SMTP secrets must be provided via the operator's shell environment.
+# Never hardcode credentials in this file — it is committed to a public repo.
+: "${SMTP_USER:?SMTP_USER env var is required (e.g. export SMTP_USER=...)}"
+: "${SMTP_PASS:?SMTP_PASS env var is required (Gmail app password)}"
+TARGET_EMAIL="${TARGET_EMAIL:-praveen.kumar@thequantsoft.co.in}"
+
+cat > ~/PRISM/prism-analyst-platform/thequantsoft/.env << EOF
 PORT=4000
-TARGET_EMAIL=praveen.kumar@thequantsoft.co.in
+TARGET_EMAIL=${TARGET_EMAIL}
 SMTP_SERVICE=gmail
-SMTP_USER=dhananjayraj75@gmail.com
-SMTP_PASS=ejrkgblstpjpxauw
+SMTP_USER=${SMTP_USER}
+SMTP_PASS=${SMTP_PASS}
 COMPANY_NAME=QUANTSOFT
 LINKEDIN_URL=https://www.linkedin.com/company/quantsoft252
 LINKEDIN_HANDLE=quantsoft252
@@ -62,7 +69,8 @@ LOCATION_SEC=Mumbai · Bangalore
 COPYRIGHT_YEAR=2026
 COPYRIGHT_DOMAIN=thequantsoft.co.in
 EOF
-echo "   ✅ Landing .env created"
+chmod 600 ~/PRISM/prism-analyst-platform/thequantsoft/.env
+echo "   ✅ Landing .env created (mode 600, secrets from env)"
 echo ""
 
 # ── STEP 4: Create backend .env (no DB for now) ──
