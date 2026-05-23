@@ -84,4 +84,14 @@ export const apiClient = {
     });
     return handleResponse<T>(response);
   },
+
+  async put<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+    const response = await fetch(buildUrl(path, opts.query), {
+      method: "PUT",
+      headers: defaultHeaders(),
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      signal: opts.signal,
+    });
+    return handleResponse<T>(response);
+  },
 };
