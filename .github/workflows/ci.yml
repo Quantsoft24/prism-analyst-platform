@@ -4,7 +4,8 @@ on:
   pull_request:
     branches: [main, production]
   push:
-    branches: [main]
+    # Also run CI on production pushes so direct hotfixes don't bypass gates.
+    branches: [main, production]
 
 jobs:
   lint-and-typecheck:

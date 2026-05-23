@@ -29,17 +29,23 @@ services:
       - prism-net
 
   # ── PRISM Frontend — Next.js (:3000) ──
+  #
+  # NEXT_PUBLIC_* MUST be passed at BUILD time (Next.js inlines them statically
+  # into the JS bundles when `next build` runs). The compose `environment:`
+  # block only sets runtime container env — too late for static replacement.
+  # See the matching ARG/ENV lines in Dockerfile's builder stage.
   frontend:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://api.thequantsoft.co.in
+        NEXT_PUBLIC_LANDING_URL: https://thequantsoft.co.in
+        NEXT_PUBLIC_LIVE_API: "false"
+        NEXT_PUBLIC_STREAMING: "false"
+        NEXT_PUBLIC_AUTH: "false"
     container_name: prism-frontend
     restart: unless-stopped
-    environment:
-      - NEXT_PUBLIC_API_URL=https://api.thequantsoft.co.in
-      - NEXT_PUBLIC_LANDING_URL=https://thequantsoft.co.in
-      - NEXT_PUBLIC_LIVE_API=false
-      - NEXT_PUBLIC_STREAMING=false
     ports:
       - "3000:3000"
     healthcheck:
