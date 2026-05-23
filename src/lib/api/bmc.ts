@@ -1,61 +1,69 @@
 /**
  * BMC (Business Model Canvas) API client + React Query hooks.
  *
- * Wire types mirror `prism-analyst-services/src/schemas/bmc.py`. Keep in sync.
+ * Backed by PRISM's `/api/v1/bmc/*` router, which is a thin proxy to the
+ * external `bmc` service (read-on-demand 9-block canvas). Wire shapes mirror
+ * that service's response — see `integeration_intake_answers.md`.
  *
- * Two read hooks (`useBMC`, `useBMCLibrary`) and one mutation (`useGenerateBMC`).
- * Generation is slow (~15-40s, 9 grounded LLM calls) so the mutation has no
- * retry and a long-running expectation; the UI shows a generating state.
+ * Two read hooks (`useBMC`, `useBMCLibrary`) and one mutation
+ * (`useGenerateBMC`). Generation can take ~25-35 s cold; the UI shows a
+ * "generating" state. The block drill-down chat is server-stateful now:
+ * history lives in `bmc_chats` upstream, so the client just sends a message
+ * and the server returns the running history.
  */
 
 import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
 
 import { apiClient } from "./client";
 
-// ── Wire types (mirror schemas/bmc.py) ────────────────────────────────────
+// ── Wire types (match the external BMC service response) ─────────────────
 
 export interface BMCEvidence {
-  marker: string;
-  chunk_id: string | null;
-  filing_id: string | null;
-  page_number: number | null;
-  excerpt: string;
+  marker: string;        // e.g. "[1]"
+  newsid: string;        // filing identifier from filings_index
+  page: number | null;   // page number inside the PDF
+  excerpt: string;       // verbatim quoted text
 }
 
 export interface BMCBlock {
   block_id: string;
   title: string;
-  order: number;
+  /** Bullets with inline `[n]` citation markers. */
   summary_bullets: string[];
-  key_insights: string[] | null;
+  key_insights?: string[] | null;
+  /** "ok" | "evidence_missing"; the service does not emit "failed" per block. */
+  status: "ok" | "evidence_missing";
   confidence: number;
-  status: "ok" | "evidence_missing" | "failed";
   evidence: BMCEvidence[];
 }
 
-export interface BMCContradiction {
-  block_a: string;
-  block_b: string;
-  issue: string;
+export interface BMCSelectedFiling {
+  slot: "annual_report" | "investor_presentation" | "result" | string;
+  category?: string;
+  announcement_dt?: string;
+  page_count?: number;
+  from_cache?: boolean;
+  sections_read?: string[];
 }
 
 export interface BMC {
-  id: string;
+  bmc_id: string;
   ticker: string;
-  company_id: string;
+  company_name: string;
   version: number;
-  fiscal_period: string | null;
-  status: "running" | "complete" | "partial" | "failed";
+  /** complete | partial | failed | no_evidence */
+  status: "complete" | "partial" | "failed" | "no_evidence";
   overall_confidence: number | null;
-  model: string | null;
-  created_at: string;
   blocks: BMCBlock[];
-  contradictions: BMCContradiction[];
+  selected_filings?: BMCSelectedFiling[];
+  /** Slots that the service couldn't find filings for (e.g. ["investor_presentation"]). */
+  gaps?: string[];
+  needs_clarification?: boolean;
+  clarification?: string | null;
 }
 
 export interface BMCVersionSummary {
-  id: string;
-  ticker: string;
+  bmc_id: string;
   version: number;
   fiscal_period: string | null;
   status: string;
@@ -70,6 +78,15 @@ export interface BMCChatMessage {
   content: string;
 }
 
+export interface BMCBlockChatResponse {
+  answer: string;
+  used_markers?: string[];
+  evidence_missing?: boolean;
+  evidence?: BMCEvidence[];
+  /** Full server-side thread so the UI can render the latest state. */
+  history?: BMCChatMessage[];
+}
+
 export const bmcApi = {
   getLatest(ticker: string, signal?: AbortSignal): Promise<BMC> {
     return apiClient.get<BMC>(`/api/v1/bmc/${encodeURIComponent(ticker)}`, { signal });
@@ -82,19 +99,22 @@ export const bmcApi = {
   },
   run(ticker: string, fiscalPeriod?: string): Promise<BMC> {
     return apiClient.post<BMC>(`/api/v1/bmc/${encodeURIComponent(ticker)}/run`, {
-      body: { fiscal_period: fiscalPeriod ?? null },
+      body: fiscalPeriod ? { fiscal_period: fiscalPeriod } : {},
     });
   },
-  /** Drill-down chat about one block. Stateless — pass the prior thread. */
+  /**
+   * Drill-down chat about one block. Server tracks the thread in `bmc_chats`,
+   * so just send the new message and use `response.history` for the UI thread.
+   */
   chatBlock(
     ticker: string,
     blockId: string,
     message: string,
-    history: BMCChatMessage[],
-  ): Promise<{ answer: string }> {
-    return apiClient.post<{ answer: string }>(
+    version?: number,
+  ): Promise<BMCBlockChatResponse> {
+    return apiClient.post<BMCBlockChatResponse>(
       `/api/v1/bmc/${encodeURIComponent(ticker)}/blocks/${encodeURIComponent(blockId)}/chat`,
-      { body: { message, history } },
+      { body: version != null ? { user_message: message, version } : { user_message: message } },
     );
   },
 };
@@ -114,8 +134,7 @@ export function useBMC(
     queryKey: bmcKeys.latest(ticker ?? ""),
     queryFn: ({ signal }) => bmcApi.getLatest(ticker!, signal),
     enabled: !!ticker,
-    // A 404 (no canvas yet) is an expected state, not a transient error —
-    // don't retry it.
+    // 404 = "no canvas yet" — expected state, don't retry.
     retry: false,
     ...options,
   });

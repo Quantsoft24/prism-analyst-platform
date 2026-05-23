@@ -48,13 +48,18 @@ export default function BMCEvidencePanel({
   const send = async () => {
     const q = input.trim();
     if (!q || !ticker || sending) return;
-    const history = thread;
+    // Optimistic append; the server returns the canonical thread which we
+    // adopt on success (chat history is now stored upstream in `bmc_chats`).
     setThread((t) => [...t, { role: "user", content: q }]);
     setInput("");
     setSending(true);
     try {
-      const { answer } = await bmcApi.chatBlock(ticker, block.block_id, q, history);
-      setThread((t) => [...t, { role: "assistant", content: answer }]);
+      const resp = await bmcApi.chatBlock(ticker, block.block_id, q);
+      if (resp.history && resp.history.length > 0) {
+        setThread(resp.history);
+      } else {
+        setThread((t) => [...t, { role: "assistant", content: resp.answer }]);
+      }
     } catch (err) {
       setThread((t) => [
         ...t,
@@ -87,14 +92,14 @@ export default function BMCEvidencePanel({
           <ul className={styles.list}>
             {block.evidence.map((ev) => (
               <li
-                key={`${ev.marker}-${ev.chunk_id}`}
+                key={`${ev.marker}-${ev.newsid}`}
                 className={cn(styles.item, highlightMarker === ev.marker && styles.itemHighlight)}
               >
                 <div className={styles.itemHead}>
                   <span className={styles.marker}>{ev.marker}</span>
                   <span className={styles.page}>
                     <FileText size={12} />
-                    {ev.page_number != null ? `Page ${ev.page_number}` : "Filing"}
+                    {ev.page != null ? `Page ${ev.page}` : "Filing"}
                   </span>
                 </div>
                 <pre className={styles.excerpt}>{ev.excerpt}</pre>

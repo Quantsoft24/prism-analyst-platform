@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Download, LayoutGrid, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, Download, FileX, LayoutGrid, Loader2, Sparkles } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -89,7 +89,7 @@ export default function BMCView({ initialTicker }: BMCViewProps) {
             {submitted && (
               <button
                 className={cn(styles.btn, styles.btnPrimary)}
-                onClick={() => generate.mutate(bmc?.fiscal_period ?? undefined)}
+                onClick={() => generate.mutate(undefined)}
                 disabled={generate.isPending}
               >
                 {generate.isPending ? (
@@ -115,7 +115,6 @@ export default function BMCView({ initialTicker }: BMCViewProps) {
                 </span>
                 <span>
                   v{bmc.version}
-                  {bmc.fiscal_period ? ` · ${bmc.fiscal_period}` : ""}
                   {bmc.overall_confidence != null
                     ? ` · ${Math.round(bmc.overall_confidence * 100)}% confidence`
                     : ""}
@@ -144,19 +143,20 @@ export default function BMCView({ initialTicker }: BMCViewProps) {
             </div>
           )}
 
-          {/* Export — plain download links to the API (dev-firm auth resolves
-              without a header, matching how the canvas was generated). */}
+          {/* Export — plain download links via PRISM's proxy. The upstream BMC
+              service supports JSON + PDF (XLSX returns 501 — hidden until it
+              ships). */}
           {bmc && submitted && (
             <div className={styles.exports}>
               <span className={styles.exportLabel}>
                 <Download size={12} /> Export
               </span>
-              {(["pdf", "xlsx", "json"] as const).map((fmt) => (
+              {(["pdf", "json"] as const).map((fmt) => (
                 <a
                   key={fmt}
                   className={styles.exportLink}
                   href={new URL(
-                    `/api/v1/bmc/${encodeURIComponent(submitted)}/export?format=${fmt}`,
+                    `/api/v1/bmc/${encodeURIComponent(submitted)}/${bmc.version}/export?format=${fmt}`,
                     config.apiUrl,
                   ).toString()}
                   download
@@ -195,18 +195,31 @@ export default function BMCView({ initialTicker }: BMCViewProps) {
           </div>
         )}
 
-        {/* Cross-block contradictions flagged by the reconciler */}
-        {bmc && bmc.contradictions.length > 0 && (
+        {/* Clarification — the upstream couldn't pick a canvas with the
+            available filings and asks a follow-up. */}
+        {bmc?.needs_clarification && bmc.clarification && (
           <div className={styles.contradictions}>
             <div className={styles.contradictionsTitle}>
               <AlertTriangle size={14} />
-              {bmc.contradictions.length} cross-block inconsistenc
-              {bmc.contradictions.length === 1 ? "y" : "ies"} flagged
+              Clarification needed
+            </div>
+            <p className={styles.contradictionItem}>{bmc.clarification}</p>
+          </div>
+        )}
+
+        {/* Gaps — filings the service wanted but couldn't locate (typically
+            "investor_presentation"). Useful context for analysts. */}
+        {bmc && bmc.gaps && bmc.gaps.length > 0 && (
+          <div className={styles.contradictions}>
+            <div className={styles.contradictionsTitle}>
+              <FileX size={14} />
+              {bmc.gaps.length} filing slot{bmc.gaps.length === 1 ? "" : "s"} missing — canvas
+              built from the rest
             </div>
             <ul className={styles.contradictionsList}>
-              {bmc.contradictions.map((c, i) => (
-                <li key={i} className={styles.contradictionItem}>
-                  <strong>{c.block_a}</strong> ↔ <strong>{c.block_b}</strong>: {c.issue}
+              {bmc.gaps.map((slot) => (
+                <li key={slot} className={styles.contradictionItem}>
+                  {slot.replace(/_/g, " ")}
                 </li>
               ))}
             </ul>

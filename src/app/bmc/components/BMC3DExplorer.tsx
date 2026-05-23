@@ -29,7 +29,7 @@ const BMC_COLORS: Record<string, string> = {
   revenue_streams: "#FFD740",
   key_resources: "#FF6E40",
   key_activities: "#18FFFF",
-  key_partners: "#B388FF",
+  key_partnerships: "#B388FF",
   cost_structure: "#FF5252",
 };
 
@@ -41,7 +41,7 @@ const BMC_ICONS: Record<string, string> = {
   revenue_streams: "💰",
   key_resources: "🔑",
   key_activities: "⚙️",
-  key_partners: "🧩",
+  key_partnerships: "🧩",
   cost_structure: "📊",
 };
 
@@ -53,7 +53,7 @@ const BMC_SHORT: Record<string, string> = {
   revenue_streams: "Revenue Streams",
   key_resources: "Key Resources",
   key_activities: "Key Activities",
-  key_partners: "Key Partners",
+  key_partnerships: "Key Partners",
   cost_structure: "Cost Structure",
 };
 

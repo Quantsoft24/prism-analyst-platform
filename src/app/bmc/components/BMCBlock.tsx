@@ -60,9 +60,7 @@ export default function BMCBlock({ block, onCiteClick, className }: BMCBlockProp
       <div className={styles.body}>
         {isEmpty ? (
           <p className={styles.empty}>
-            {block.status === "failed"
-              ? "Generation failed for this block."
-              : "No filing evidence found — not enough disclosure to ground this block."}
+            No filing evidence found — not enough disclosure to ground this block.
           </p>
         ) : (
           <ul className={styles.bullets}>
