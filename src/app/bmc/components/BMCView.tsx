@@ -27,8 +27,11 @@ interface BMCViewProps {
  * spanning Osterwalder layout can return in Phase 3 if there's demand.
  */
 export default function BMCView({ initialTicker }: BMCViewProps) {
-  const [ticker, setTicker] = React.useState<string>(initialTicker?.toUpperCase() ?? "");
-  const [submitted, setSubmitted] = React.useState<string | null>(initialTicker?.toUpperCase() ?? null);
+  // We accept both short tickers ("TCS") and multi-word names ("Tata
+  // Consultancy") — the upstream BMC service uses literal case-sensitive
+  // matching against the saved name, so DON'T force uppercase here.
+  const [ticker, setTicker] = React.useState<string>(initialTicker ?? "");
+  const [submitted, setSubmitted] = React.useState<string | null>(initialTicker ?? null);
   const [selectedBlock, setSelectedBlock] = React.useState<BMCBlockData | null>(null);
   const [highlightMarker, setHighlightMarker] = React.useState<string | null>(null);
   const [viewMode, setViewMode] = React.useState<ViewMode>("canvas");
@@ -39,15 +42,14 @@ export default function BMCView({ initialTicker }: BMCViewProps) {
   // Follow a new ticker pushed by the parent (e.g. via @bmc).
   React.useEffect(() => {
     if (initialTicker) {
-      const t = initialTicker.toUpperCase();
-      setTicker(t);
-      setSubmitted(t);
+      setTicker(initialTicker);
+      setSubmitted(initialTicker);
       setSelectedBlock(null);
     }
   }, [initialTicker]);
 
   const handleLoad = () => {
-    const t = ticker.trim().toUpperCase();
+    const t = ticker.trim();
     if (t) {
       setSubmitted(t);
       setSelectedBlock(null);
@@ -79,7 +81,7 @@ export default function BMCView({ initialTicker }: BMCViewProps) {
               value={ticker}
               onChange={(e) => setTicker(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleLoad()}
-              placeholder="Ticker (e.g. TCS, INFY)"
+              placeholder="Company (e.g. Tata Consultancy, Reliance Industries)"
               className={styles.input}
               aria-label="Company ticker"
             />
