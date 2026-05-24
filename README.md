@@ -177,6 +177,11 @@ PRISM_APP_URL=https://prism.thequantsoft.co.in
 
 ## Production Deployment
 
+> **Full deployment guide:** [DEPLOYMENT.md](DEPLOYMENT.md) — covers every
+> scenario (code changes, env var changes, secrets, migrations, rollback,
+> hotfixes), all the gotchas we've already hit, and an honest assessment of
+> where this setup is industry-standard vs where the gaps are.
+
 ### Branch model
 
 `main` is trunk; `production` is the release pointer. Deploy fires ONLY on
