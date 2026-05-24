@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { MOCK_TOOLS, MOCK_USER, type ToolItem } from "@/lib/mockData";
+import { MOCK_USER } from "@/lib/mockData";
+import { useIntegrations, useToggleIntegration, type IntegrationHealth } from "@/lib/api/integrations";
 import styles from "./SettingsView.module.css";
 
 /* ── Settings nav items ── */
@@ -30,25 +31,46 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   );
 }
 
-/* ── Tool Toggle Row ── */
-function ToolToggleRow({ tool }: { tool: ToolItem }) {
-  const [enabled, setEnabled] = useState(true);
+/* ── Integration Row (live registry data + firm-level toggle) ──
+ * Reads the backend registry; the toggle PERSISTS a firm-level enable/disable
+ * (config/integrations.yml is the catalog; firm_integrations stores overrides).
+ * Per-user toggles + add-from-UI come with the auth/user-profile slice. */
+function IntegrationRow({ integration, index }: { integration: IntegrationHealth; index: number }) {
+  const toggle = useToggleIntegration();
+  const loaded = integration.status !== "error";
   const statusClass =
-    tool.status === "beta" ? styles.statusBeta :
-    tool.status === "active" ? styles.statusActive :
+    integration.status === "error" ? styles.statusInactive :
+    integration.enabled ? styles.statusActive :
     styles.statusInactive;
+  const statusLabel =
+    integration.status === "error" ? "Error" :
+    integration.enabled ? "Active" : "Off";
 
   return (
     <div className={styles.toolToggleRow}>
-      <div className={styles.toolToggleNum}>{tool.num}</div>
+      <div className={styles.toolToggleNum}>{index + 1}</div>
       <div className={styles.toolToggleInfo}>
-        <div className={styles.toolToggleName}>{tool.name}</div>
-        <div className={styles.toolToggleDesc}>{tool.desc}</div>
+        <div className={styles.toolToggleName}>
+          {integration.name}{" "}
+          <span className={styles.badge}>{integration.source}</span>
+          {integration.tool_count > 0 ? ` · ${integration.tool_count} tool${integration.tool_count === 1 ? "" : "s"}` : ""}
+        </div>
+        <div className={styles.toolToggleDesc}>
+          {integration.status === "error" && integration.error
+            ? `Failed to load: ${integration.error}`
+            : integration.description}
+        </div>
       </div>
-      <div className={`${styles.toolToggleStatus} ${statusClass}`}>
-        {tool.status === "beta" ? "Beta" : enabled ? "Active" : "Off"}
-      </div>
-      <Toggle on={enabled} onToggle={() => setEnabled(!enabled)} />
+      <div className={`${styles.toolToggleStatus} ${statusClass}`}>{statusLabel}</div>
+      <Toggle
+        on={integration.enabled}
+        onToggle={() => {
+          // Only toggle integrations that actually loaded; disabled rows can't flip.
+          if (loaded && !toggle.isPending) {
+            toggle.mutate({ name: integration.name, enabled: !integration.enabled });
+          }
+        }}
+      />
     </div>
   );
 }
@@ -74,6 +96,9 @@ export default function SettingsView() {
   const [requireSource, setRequireSource] = useState(true);
   const [crossCheck, setCrossCheck] = useState(true);
   const [complianceRedact, setComplianceRedact] = useState(true);
+
+  /* Live integrations from the backend registry */
+  const { data: integrations, isLoading: integrationsLoading, isError: integrationsError } = useIntegrations();
 
   return (
     <div className={styles.settingsView}>
@@ -122,15 +147,23 @@ export default function SettingsView() {
             </div>
           )}
 
-          {/* Tools Section */}
+          {/* Tools Section — live integration registry */}
           {activeNav === "Tools & Capabilities" && (
             <div className={styles.settingsSection}>
               <h3>Tools &amp; Capabilities</h3>
               <p className={styles.sectionDesc}>
-                15 backend tools available. The LLM dynamically picks tools based on your query — toggle any off to disable globally.
+                Registered agent integrations. The LLM dynamically picks tools based on your query.
+                New tools are added via the integration registry (see docs/INTEGRATION_INTAKE.md).
               </p>
-              {MOCK_TOOLS.map((tool) => (
-                <ToolToggleRow key={tool.num} tool={tool} />
+              {integrationsLoading && <p className={styles.sectionDesc}>Loading integrations…</p>}
+              {integrationsError && (
+                <p className={styles.sectionDesc}>Couldn&apos;t reach the backend integrations endpoint.</p>
+              )}
+              {integrations && integrations.integrations.length === 0 && (
+                <p className={styles.sectionDesc}>No integrations registered yet.</p>
+              )}
+              {integrations?.integrations.map((integration, i) => (
+                <IntegrationRow key={integration.name} integration={integration} index={i} />
               ))}
             </div>
           )}
