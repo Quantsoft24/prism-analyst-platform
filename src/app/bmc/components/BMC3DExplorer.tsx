@@ -210,7 +210,9 @@ export default function BMC3DExplorer({ bmc, onSelectBlock }: BMC3DExplorerProps
   const nodeThreeObject = React.useCallback(
     (node: any) => {
       if (typeof window === "undefined") return null;
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // Lazy require — keeps three.js out of the server bundle. The rule
+      // `@typescript-eslint/no-var-requires` isn't in our config, so no
+      // disable comment is needed (and adding one fails lint).
       const THREE = require("three");
       const group = new THREE.Group();
       const isSel = selectedId === node.id;
