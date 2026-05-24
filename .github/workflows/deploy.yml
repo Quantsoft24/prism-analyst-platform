@@ -31,10 +31,16 @@ jobs:
 
             cd ~/PRISM/prism-analyst-platform
 
-            echo "📥 Pulling latest production code..."
+            echo "📥 Syncing to latest production code..."
+            # Hard-sync to origin/production. The EC2 working tree is a
+            # deploy artifact, not a dev checkout — any local modifications
+            # are stale hotfixes and must yield to what's in git. Without
+            # this, `git pull` aborts on the slightest local edit and the
+            # deploy hangs needing manual intervention.
             git fetch origin production
             git checkout production
-            git pull origin production
+            git reset --hard origin/production
+            git clean -fd
 
             echo "🔨 Building Docker images..."
             docker compose -f docker-compose.prod.yml build --no-cache frontend
