@@ -49,7 +49,17 @@ export function debounce<T extends (...args: unknown[]) => void>(
   };
 }
 
-/** Classname helper — joins truthy values */
-export function cn(...classes: (string | false | null | undefined)[]): string {
-  return classes.filter(Boolean).join(" ");
+/**
+ * className combiner. ``clsx`` handles falsy/conditional class lists;
+ * ``tailwind-merge`` resolves Tailwind class conflicts so callers can
+ * override a default safely (e.g. ``cn("bg-bg", "bg-accent")`` → ``"bg-accent"``).
+ *
+ * Strict superset of the previous "filter truthies and join" implementation —
+ * non-Tailwind strings pass through unchanged, so existing callers keep working.
+ */
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]): string {
+  return twMerge(clsx(inputs));
 }

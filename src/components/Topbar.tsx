@@ -7,6 +7,8 @@ import styles from "./Topbar.module.css";
 const VIEW_LABELS: Record<NavView, string> = {
   dashboard: "Dashboard",
   chat: "Research Chat",
+  companies: "Companies",
+  bmc: "Business Model Canvas",
   reports: "Reports Library",
   settings: "Settings",
 };

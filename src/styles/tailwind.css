@@ -1,0 +1,59 @@
+/* Tailwind v4 entrypoint.
+ *
+ * The full design token system lives in globals.css as CSS custom properties
+ * (--bg, --ink, --accent, etc.) so that both legacy CSS Modules and the new
+ * Tailwind utilities read from the SAME source of truth. We use ``@theme inline``
+ * so Tailwind emits ``var(--bg)`` at the use-site rather than baking in the
+ * value at compile time — this preserves the existing ``[data-theme="dark"]``
+ * swap mechanism for free.
+ *
+ * Adding a new design token = add a CSS var to globals.css, then add the
+ * corresponding ``--color-*`` / ``--radius-*`` / ``--font-*`` here.
+ */
+
+@import "tailwindcss";
+
+@theme inline {
+  /* ── Colors ───────────────────────────────────────────────────────── */
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-bg-sunken: var(--bg-sunken);
+  --color-bg-tint: var(--bg-tint);
+
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-mute: var(--ink-mute);
+  --color-ink-faint: var(--ink-faint);
+
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-deep: var(--accent-deep);
+
+  --color-pos: var(--pos);
+  --color-pos-soft: var(--pos-soft);
+  --color-neg: var(--neg);
+  --color-neg-soft: var(--neg-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  /* ── Typography ───────────────────────────────────────────────────── */
+  --font-display: var(--font-display);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
+
+  /* ── Radius ───────────────────────────────────────────────────────── */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+
+  /* ── Shadows ──────────────────────────────────────────────────────── */
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+}

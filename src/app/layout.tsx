@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+
+import { Providers } from "@/app/providers";
 import { fraunces, interTight, jetbrainsMono } from "@/styles/fonts";
-import { ToastProvider } from "@/components/Toast";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
@@ -22,7 +23,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body>
-        <ToastProvider>{children}</ToastProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
