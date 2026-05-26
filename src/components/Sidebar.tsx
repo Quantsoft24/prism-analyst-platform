@@ -2,6 +2,7 @@
 
 import { type NavView, NAV_ITEMS, RECENT_CHATS, MOCK_USER } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
+import Tooltip from "./Tooltip";
 
 import styles from "./Sidebar.module.css";
 
@@ -162,63 +163,72 @@ export default function Sidebar({
             </div>
           )}
           {/* Collapse / expand toggle. Hidden on mobile (drawer handles it). */}
-          <button
-            type="button"
-            className={styles.collapseBtn}
-            onClick={onToggleCollapsed}
-            title={collapsed ? "Expand sidebar (⌘B)" : "Collapse sidebar (⌘B)"}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!collapsed}
+          <Tooltip
+            label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            shortcut="⌘B"
+            side="right"
           >
-            <CollapseIcon collapsed={collapsed} />
-          </button>
+            <button
+              type="button"
+              className={styles.collapseBtn}
+              onClick={onToggleCollapsed}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!collapsed}
+            >
+              <CollapseIcon collapsed={collapsed} />
+            </button>
+          </Tooltip>
         </div>
 
         {/* New Research */}
-        <button
-          className={cn(
-            styles.newResearchBtn,
-            collapsed && styles.newResearchBtnCollapsed,
-          )}
-          onClick={onNewResearch}
-          title={collapsed ? "New research (⌘N)" : undefined}
-          aria-label="New research"
-        >
-          <PlusIcon />
-          {!collapsed && (
-            <>
-              <span>New research</span>
-              <span className={styles.kbdInline}>⌘N</span>
-            </>
-          )}
-        </button>
+        <Tooltip label="New research" shortcut="⌘N" side="right" disabled={!collapsed}>
+          <button
+            className={cn(
+              styles.newResearchBtn,
+              collapsed && styles.newResearchBtnCollapsed,
+            )}
+            onClick={onNewResearch}
+            aria-label="New research"
+          >
+            <PlusIcon />
+            {!collapsed && (
+              <>
+                <span>New research</span>
+                <span className={styles.kbdInline}>⌘N</span>
+              </>
+            )}
+          </button>
+        </Tooltip>
 
         {/* Workspace Nav */}
         {!collapsed && <div className={styles.navSection}>Workspace</div>}
         {NAV_ITEMS.map((item) => (
-          <div
+          <Tooltip
             key={item.id}
-            className={cn(
-              activeView === item.id ? styles.navItemActive : styles.navItem,
-              collapsed && styles.navItemCollapsed,
-            )}
-            onClick={() => handleNavClick(item.id)}
-            role="button"
-            tabIndex={0}
-            aria-current={activeView === item.id ? "page" : undefined}
-            // Native tooltip in collapsed mode so the user knows what each
-            // icon is — same pattern as Claude / VS Code activity bar.
-            title={collapsed ? item.label : undefined}
-            aria-label={collapsed ? item.label : undefined}
+            label={item.label}
+            side="right"
+            disabled={!collapsed}
           >
-            {icons[item.icon]}
-            {!collapsed && (
-              <>
-                <span className={styles.navItemLabel}>{item.label}</span>
-                {item.badge && <span className={styles.badge}>{item.badge}</span>}
-              </>
-            )}
-          </div>
+            <div
+              className={cn(
+                activeView === item.id ? styles.navItemActive : styles.navItem,
+                collapsed && styles.navItemCollapsed,
+              )}
+              onClick={() => handleNavClick(item.id)}
+              role="button"
+              tabIndex={0}
+              aria-current={activeView === item.id ? "page" : undefined}
+              aria-label={collapsed ? item.label : undefined}
+            >
+              {icons[item.icon]}
+              {!collapsed && (
+                <>
+                  <span className={styles.navItemLabel}>{item.label}</span>
+                  {item.badge && <span className={styles.badge}>{item.badge}</span>}
+                </>
+              )}
+            </div>
+          </Tooltip>
         ))}
 
         {/* Recent — hidden in collapsed mode; not useful as icon-only */}
@@ -249,26 +259,31 @@ export default function Sidebar({
             collapsed && styles.sidebarFooterCollapsed,
           )}
         >
-          <div
-            className={styles.avatar}
-            title={collapsed ? `${MOCK_USER.name} · ${MOCK_USER.firm}` : undefined}
+          <Tooltip
+            label={`${MOCK_USER.name} · ${MOCK_USER.firm}`}
+            side="right"
+            disabled={!collapsed}
           >
-            {MOCK_USER.initials}
-          </div>
+            <div className={styles.avatar}>{MOCK_USER.initials}</div>
+          </Tooltip>
           {!collapsed && (
             <div className={styles.userInfo}>
               <div className={styles.userName}>{MOCK_USER.name}</div>
               <div className={styles.userFirm}>{MOCK_USER.firm}</div>
             </div>
           )}
-          <button
-            className={styles.themeToggle}
-            onClick={onToggleTheme}
-            title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
-            aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+          <Tooltip
+            label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+            side="right"
           >
-            {theme === "light" ? <SunIcon /> : <MoonIcon />}
-          </button>
+            <button
+              className={styles.themeToggle}
+              onClick={onToggleTheme}
+              aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+            >
+              {theme === "light" ? <SunIcon /> : <MoonIcon />}
+            </button>
+          </Tooltip>
         </div>
       </aside>
     </>
