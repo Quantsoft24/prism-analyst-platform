@@ -2,6 +2,7 @@
 
 import { type NavView, NAV_ITEMS, RECENT_CHATS, MOCK_USER } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
+
 import styles from "./Sidebar.module.css";
 
 /* ── SVG Icons ── */
@@ -75,6 +76,29 @@ const MoonIcon = () => (
   </svg>
 );
 
+/** Double-chevron icon — flips direction based on collapsed state.
+ *  Pointing LEFT when expanded (click to collapse), RIGHT when collapsed
+ *  (click to expand). Same pattern as Claude / VS Code / Notion. */
+const CollapseIcon = ({ collapsed }: { collapsed: boolean }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    style={{ transform: collapsed ? "rotate(180deg)" : "none" }}
+  >
+    <polyline points="11 17 6 12 11 7" />
+    <polyline points="18 17 13 12 18 7" />
+  </svg>
+);
+
+const PlusIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
 /* ── Props ── */
 interface SidebarProps {
   activeView: NavView;
@@ -85,6 +109,10 @@ interface SidebarProps {
   onClose: () => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
+  /** Desktop-only collapsed mode (icons only, no labels). Mobile drawer
+   *  is governed by ``isOpen``. */
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }
 
 /* ── Component ── */
@@ -97,6 +125,8 @@ export default function Sidebar({
   onClose,
   theme,
   onToggleTheme,
+  collapsed,
+  onToggleCollapsed,
 }: SidebarProps) {
   const handleNavClick = (view: NavView) => {
     onNavigate(view);
@@ -113,74 +143,128 @@ export default function Sidebar({
       />
 
       <aside
-        className={cn(styles.sidebar, isOpen && styles.sidebarOpen)}
+        className={cn(
+          styles.sidebar,
+          isOpen && styles.sidebarOpen,
+          collapsed && styles.sidebarCollapsed,
+        )}
         role="navigation"
         aria-label="Main navigation"
+        data-collapsed={collapsed || undefined}
       >
-        {/* Brand */}
+        {/* Brand + collapse toggle */}
         <div className={styles.brand}>
           <div className={styles.brandMark}>P</div>
-          <div>
-            <div className={styles.brandName}>PRISM</div>
-            <div className={styles.brandSub}>AI Equity Research</div>
-          </div>
+          {!collapsed && (
+            <div className={styles.brandText}>
+              <div className={styles.brandName}>PRISM</div>
+              <div className={styles.brandSub}>AI Equity Research</div>
+            </div>
+          )}
+          {/* Collapse / expand toggle. Hidden on mobile (drawer handles it). */}
+          <button
+            type="button"
+            className={styles.collapseBtn}
+            onClick={onToggleCollapsed}
+            title={collapsed ? "Expand sidebar (⌘B)" : "Collapse sidebar (⌘B)"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+          >
+            <CollapseIcon collapsed={collapsed} />
+          </button>
         </div>
 
         {/* New Research */}
-        <button className={styles.newResearchBtn} onClick={onNewResearch}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          New research
-          <span className={styles.kbdInline}>⌘N</span>
+        <button
+          className={cn(
+            styles.newResearchBtn,
+            collapsed && styles.newResearchBtnCollapsed,
+          )}
+          onClick={onNewResearch}
+          title={collapsed ? "New research (⌘N)" : undefined}
+          aria-label="New research"
+        >
+          <PlusIcon />
+          {!collapsed && (
+            <>
+              <span>New research</span>
+              <span className={styles.kbdInline}>⌘N</span>
+            </>
+          )}
         </button>
 
         {/* Workspace Nav */}
-        <div className={styles.navSection}>Workspace</div>
+        {!collapsed && <div className={styles.navSection}>Workspace</div>}
         {NAV_ITEMS.map((item) => (
           <div
             key={item.id}
-            className={activeView === item.id ? styles.navItemActive : styles.navItem}
+            className={cn(
+              activeView === item.id ? styles.navItemActive : styles.navItem,
+              collapsed && styles.navItemCollapsed,
+            )}
             onClick={() => handleNavClick(item.id)}
             role="button"
             tabIndex={0}
             aria-current={activeView === item.id ? "page" : undefined}
+            // Native tooltip in collapsed mode so the user knows what each
+            // icon is — same pattern as Claude / VS Code activity bar.
+            title={collapsed ? item.label : undefined}
+            aria-label={collapsed ? item.label : undefined}
           >
             {icons[item.icon]}
-            {item.label}
-            {item.badge && <span className={styles.badge}>{item.badge}</span>}
+            {!collapsed && (
+              <>
+                <span className={styles.navItemLabel}>{item.label}</span>
+                {item.badge && <span className={styles.badge}>{item.badge}</span>}
+              </>
+            )}
           </div>
         ))}
 
-        {/* Recent */}
-        <div className={styles.navSection}>Recent</div>
-        {RECENT_CHATS.map((chat) => (
-          <div
-            key={chat.id}
-            className={styles.navRecent}
-            onClick={() => {
-              onRecentChat(chat.id);
-              onClose();
-            }}
-            role="button"
-            tabIndex={0}
-          >
-            {chat.label}
-          </div>
-        ))}
+        {/* Recent — hidden in collapsed mode; not useful as icon-only */}
+        {!collapsed && (
+          <>
+            <div className={styles.navSection}>Recent</div>
+            {RECENT_CHATS.map((chat) => (
+              <div
+                key={chat.id}
+                className={styles.navRecent}
+                onClick={() => {
+                  onRecentChat(chat.id);
+                  onClose();
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                {chat.label}
+              </div>
+            ))}
+          </>
+        )}
 
         {/* Footer */}
-        <div className={styles.sidebarFooter}>
-          <div className={styles.avatar}>{MOCK_USER.initials}</div>
-          <div className={styles.userInfo}>
-            <div className={styles.userName}>{MOCK_USER.name}</div>
-            <div className={styles.userFirm}>{MOCK_USER.firm}</div>
+        <div
+          className={cn(
+            styles.sidebarFooter,
+            collapsed && styles.sidebarFooterCollapsed,
+          )}
+        >
+          <div
+            className={styles.avatar}
+            title={collapsed ? `${MOCK_USER.name} · ${MOCK_USER.firm}` : undefined}
+          >
+            {MOCK_USER.initials}
           </div>
+          {!collapsed && (
+            <div className={styles.userInfo}>
+              <div className={styles.userName}>{MOCK_USER.name}</div>
+              <div className={styles.userFirm}>{MOCK_USER.firm}</div>
+            </div>
+          )}
           <button
             className={styles.themeToggle}
             onClick={onToggleTheme}
-            title="Toggle theme"
+            title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
             aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
           >
             {theme === "light" ? <SunIcon /> : <MoonIcon />}

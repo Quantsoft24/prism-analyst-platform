@@ -10,8 +10,20 @@
   padding: 18px 14px;
   gap: 4px;
   overflow-y: auto;
+  overflow-x: hidden;
   height: 100vh;
   height: 100dvh;
+  width: var(--sidebar-width, 240px);
+  transition:
+    width 200ms ease,
+    padding 200ms ease;
+}
+
+/* Collapsed = icon-only rail (Claude / VS Code / Notion pattern).
+   Width matches AppShell's --shell-sidebar-collapsed-width. */
+.sidebarCollapsed {
+  width: 64px;
+  padding: 18px 8px;
 }
 
 /* ── Brand ── */
@@ -22,6 +34,60 @@
   padding: 6px 8px 18px;
   border-bottom: 1px solid var(--line-soft);
   margin-bottom: 14px;
+  position: relative;
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* In collapsed mode, center the mark + the toggle stacks below it. */
+.sidebarCollapsed .brand {
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0 12px;
+}
+
+/* Toggle button (chevron). On hover only when expanded — in collapsed
+   mode it's persistently visible so the user can find their way back. */
+.collapseBtn {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--ink-mute);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 150ms ease,
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+.brand:hover .collapseBtn,
+.collapseBtn:focus-visible {
+  opacity: 1;
+}
+.collapseBtn:hover {
+  background: var(--bg-tint);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.collapseBtn svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 200ms ease;
+}
+/* Always show the toggle in collapsed mode so there's an obvious way out. */
+.sidebarCollapsed .collapseBtn {
+  opacity: 1;
+  margin-left: 0;
 }
 
 .brandMark {
@@ -68,7 +134,9 @@
   font-weight: 500;
   cursor: pointer;
   margin-bottom: 8px;
-  transition: transform var(--transition-fast);
+  transition:
+    transform var(--transition-fast),
+    padding 200ms ease;
 }
 
 .newResearchBtn:hover {
@@ -79,6 +147,13 @@
 .newResearchBtn svg {
   width: 14px;
   height: 14px;
+  flex-shrink: 0;
+}
+
+/* Collapsed mode: shrink to a square icon button, center the plus. */
+.newResearchBtnCollapsed {
+  padding: 10px;
+  justify-content: center;
 }
 
 .kbdInline {
@@ -139,6 +214,23 @@
   flex-shrink: 0;
 }
 
+/* Collapsed = center the icon, drop the active-state left bar (it would
+   poke into negative space and look broken at this width). */
+.navItemCollapsed {
+  justify-content: center;
+  padding: 10px;
+}
+.navItemCollapsed::before {
+  display: none;
+}
+
+.navItemLabel {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .badge {
   margin-left: auto;
   font-size: 10px;
@@ -180,6 +272,14 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* Collapsed footer: avatar above, theme toggle below — vertical stack so
+   nothing gets clipped at the 64px width. */
+.sidebarFooterCollapsed {
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
 }
 
 .avatar {
@@ -249,12 +349,16 @@
 }
 
 @media (max-width: 900px) {
-  .sidebar {
+  /* Mobile = drawer. Force the full drawer width regardless of the desktop
+     collapsed flag — icon-only doesn't make sense for a touch overlay. */
+  .sidebar,
+  .sidebarCollapsed {
     position: fixed;
     top: 0;
     left: 0;
     bottom: 0;
     width: 280px;
+    padding: 18px 14px;
     transform: translateX(-100%);
     transition: transform var(--transition-slow);
     z-index: 100;
@@ -263,5 +367,11 @@
 
   .sidebarOpen {
     transform: translateX(0);
+  }
+
+  /* In drawer mode the collapse toggle is irrelevant — hide it. */
+  .sidebarCollapsed .collapseBtn,
+  .sidebar .collapseBtn {
+    display: none;
   }
 }

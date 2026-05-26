@@ -3,11 +3,24 @@
    ══════════════════════════════════════════════════ */
 
 .shell {
+  /* Width is a CSS variable so the sidebar can animate its own width and
+     the grid track follows in lockstep — no JS measurement required. */
+  --shell-sidebar-width: var(--sidebar-width, 240px);
+  --shell-sidebar-collapsed-width: 64px;
+
   display: grid;
-  grid-template-columns: var(--sidebar-width) 1fr;
+  grid-template-columns: var(--shell-sidebar-width) 1fr;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
+  transition: grid-template-columns 200ms ease;
+}
+
+/* When AppShell.tsx sets the collapsed flag, narrow the sidebar track to
+   just the icon column. The sidebar itself animates its own width below;
+   keeping both in sync via a single CSS variable avoids jitter. */
+.shellCollapsed {
+  grid-template-columns: var(--shell-sidebar-collapsed-width) 1fr;
 }
 
 .main {
@@ -23,9 +36,11 @@
   overflow-x: hidden;
 }
 
-/* ── Tablet: sidebar collapses ── */
+/* ── Tablet: sidebar collapses to a drawer (off-canvas) ── */
 @media (max-width: 900px) {
-  .shell {
+  .shell,
+  .shellCollapsed {
+    /* Drawer mode: the sidebar takes 0 track and floats above the content. */
     grid-template-columns: 1fr;
   }
 }
