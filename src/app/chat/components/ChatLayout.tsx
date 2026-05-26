@@ -1,44 +1,33 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+
 import { cn } from "@/lib/utils";
-import { MOCK_USER, type IntentConfig, type ToolCall } from "@/lib/mockData";
+import { MOCK_USER, type IntentConfig } from "@/lib/mockData";
+import type {
+  AgentThought,
+  ChatMessage,
+  Phase,
+  RunMeta,
+  ToolCallState,
+} from "@/hooks/useChat";
+
 import styles from "./ChatLayout.module.css";
 
-/* ── Mock workspace data ── */
-const MOCK_KPIS = [
-  { label: "Revenue", value: "₹2.74L cr", delta: "+11.8% YoY", pos: true },
-  { label: "EBITDA Margin", value: "17.4%", delta: "flat QoQ", pos: true },
-  { label: "PAT", value: "₹19,407 cr", delta: "+12.1% YoY", pos: true },
-  { label: "Jio ARPU", value: "₹202", delta: "+3.1% QoQ", pos: true },
-];
-
-const MOCK_SOURCES = [
-  { num: "1", title: "Q4 FY26 Results — BSE Filing", meta: "NSE: RELIANCE · 2 May 2026" },
-  { num: "2", title: "Analyst consensus — Bloomberg", meta: "Last updated 1 May 2026" },
-  { num: "3", title: "Jio Platform quarterly update", meta: "Company website · April 2026" },
-];
-
-/* ── Types ── */
-interface ChatMessage {
-  role: "user" | "assistant";
-  text: string;
-  toolCalls?: ToolCall[];
-  visibleToolCount?: number;
-  showAnswer?: boolean;
-  isThinking?: boolean;
-  streamedText?: string;
-}
+/* ── Props ─────────────────────────────────────────────────────────────── */
 
 interface ChatLayoutProps {
   messages: ChatMessage[];
   intentConfig: IntentConfig;
   showWorkspace: boolean;
-  phase: string;
+  phase: Phase;
+  runMeta: RunMeta;
   onFollowUp: (q: string) => void;
+  onStop: () => void;
+  onRetry: () => void;
 }
 
-/* ── Citation renderer ── */
+/* ── Citation renderer — inline `[n]` markers ──────────────────────────── */
 function renderTextWithCitations(text: string): React.ReactNode[] {
   const parts = text.split(/(\[\d+\])/g);
   return parts.map((part, i) => {
@@ -60,34 +49,130 @@ function renderTextWithCitations(text: string): React.ReactNode[] {
   });
 }
 
-/* ── Tool Call Component ── */
-function ToolCallItem({ tool, visible, index }: { tool: ToolCall; visible: boolean; index: number }) {
-  const [expanded, setExpanded] = useState(index === 0);
+/* ── Format helpers ────────────────────────────────────────────────────── */
 
-  if (!visible) return null;
+function formatLatency(ms: number | null): string {
+  if (ms == null) return "—";
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+function formatArgs(args: Record<string, unknown>): string {
+  const entries = Object.entries(args);
+  if (entries.length === 0) return "(no args)";
+  return entries
+    .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+    .join(", ");
+}
+
+function formatTokensCost(meta: RunMeta): string | null {
+  if (meta.input_tokens == null && meta.output_tokens == null) return null;
+  const tokens = `${(meta.input_tokens ?? 0).toLocaleString()} / ${(
+    meta.output_tokens ?? 0
+  ).toLocaleString()} tok`;
+  if (!meta.cost_usd) return tokens;
+  return `${tokens} · $${meta.cost_usd.toFixed(4)}`;
+}
+
+const NEXT_ACTION_HINTS: Record<string, string> = {
+  ask_user_to_retry_later: "Try again in a moment",
+  try_alternate_tool: "Trying alternative…",
+  ask_user_to_clarify: "Needs clarification",
+  give_up_gracefully: "Couldn't recover",
+};
+
+/* ── Tool Call card — real input / output / status / freshness ────────── */
+
+function ToolCallItem({
+  tool,
+  expanded,
+  onToggle,
+}: {
+  tool: ToolCallState;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const isError = tool.status === "error";
+  const isRunning = tool.status === "running";
+
+  // Compact status line shown when collapsed.
+  const headerStatus = isRunning
+    ? "running…"
+    : isError
+      ? (tool.error ?? "error")
+      : (tool.result_summary ?? "ok");
 
   return (
-    <div className={cn(styles.toolCall, expanded && styles.toolCallExpanded)} onClick={() => setExpanded(!expanded)}>
+    <div
+      className={cn(
+        styles.toolCall,
+        expanded && styles.toolCallExpanded,
+        isError && styles.toolCallError,
+      )}
+      onClick={onToggle}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
+    >
       <div className={styles.toolCallHeader}>
         <svg
-          className={cn(styles.toolCallIcon, tool.running ? styles.toolCallRunning : styles.toolCallDone)}
+          className={cn(
+            styles.toolCallIcon,
+            isRunning && styles.toolCallRunning,
+            !isRunning && !isError && styles.toolCallDone,
+            isError && styles.toolCallFailed,
+          )}
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth={tool.running ? 2 : 3}
+          strokeWidth={isRunning ? 2 : 3}
         >
-          {tool.running ? (
+          {isRunning ? (
             <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+          ) : isError ? (
+            <>
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </>
           ) : (
             <polyline points="20 6 9 17 4 12" />
           )}
         </svg>
         <div className={styles.toolCallMeta}>
-          <span className={styles.toolCallName}>{tool.name}</span>
-          <span className={styles.toolCallStatus}>{tool.status}</span>
+          <span className={styles.toolCallName}>
+            {tool.tool}
+            {tool.retry_attempt > 0 && (
+              <span className={styles.toolCallRetry} title="Retried">
+                {" "}
+                ↻{tool.retry_attempt}
+              </span>
+            )}
+          </span>
+          <span className={styles.toolCallStatus}>{headerStatus}</span>
         </div>
-        <span className={styles.toolCallTime}>{tool.time}</span>
-        <svg className={styles.toolCallChevron} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        {tool.freshness && (
+          <span
+            className={styles.freshnessChip}
+            title={`Source: ${tool.freshness.source}`}
+          >
+            as of {tool.freshness.as_of ?? "n/a"}
+          </span>
+        )}
+        <span className={styles.toolCallTime}>
+          {formatLatency(tool.latency_ms)}
+        </span>
+        <svg
+          className={styles.toolCallChevron}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <polyline points="9 18 15 12 9 6" />
         </svg>
       </div>
@@ -95,13 +180,31 @@ function ToolCallItem({ tool, visible, index }: { tool: ToolCall; visible: boole
         <div className={styles.toolCallBody}>
           <div className={styles.toolCallSection}>
             <span className={styles.toolCallLabel}>Input</span>
-            <span className={styles.toolCallValue}>
-              <span className={styles.key}>params</span>: {"{"} auto-routed by LLM based on context {"}"}
-            </span>
+            <code className={styles.toolCallCode}>{formatArgs(tool.args)}</code>
           </div>
           <div className={styles.toolCallSection}>
-            <span className={styles.toolCallLabel}>Output</span>
-            <span className={styles.toolCallValue}>→ structured data attached to workspace</span>
+            <span className={styles.toolCallLabel}>
+              {isError ? "Error" : "Output"}
+            </span>
+            {isError ? (
+              <div>
+                <code className={cn(styles.toolCallCode, styles.toolCallCodeError)}>
+                  {tool.error ?? "tool failed"}
+                </code>
+                {tool.error_code && (
+                  <span className={styles.errorCodeChip}>{tool.error_code}</span>
+                )}
+                {tool.next_action && (
+                  <span className={styles.nextActionChip}>
+                    {NEXT_ACTION_HINTS[tool.next_action] ?? tool.next_action}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <code className={styles.toolCallCode}>
+                {tool.result_summary ?? "(empty)"}
+              </code>
+            )}
           </div>
         </div>
       )}
@@ -109,7 +212,49 @@ function ToolCallItem({ tool, visible, index }: { tool: ToolCall; visible: boole
   );
 }
 
-/* ── Thinking Dots ── */
+/* ── Thinking block — agent's reasoning, collapsible ──────────────────── */
+
+function ThinkingBlock({ thoughts }: { thoughts: AgentThought[] }) {
+  const [open, setOpen] = useState(true);
+  if (thoughts.length === 0) return null;
+  return (
+    <div className={styles.thinkingBlock}>
+      <button
+        className={styles.thinkingBlockHeader}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span>
+          Thinking · {thoughts.length} step{thoughts.length === 1 ? "" : "s"}
+        </span>
+        <svg
+          className={cn(styles.thinkingChevron, open && styles.thinkingChevronOpen)}
+          viewBox="0 0 24 24"
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <ul className={styles.thinkingList}>
+          {thoughts.map((t, i) => (
+            <li key={i} className={styles.thinkingItem}>
+              <span className={styles.thinkingKind}>{t.kind}</span>
+              <span>{t.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/* ── Thinking dots (initial placeholder, before the first event) ──────── */
+
 function ThinkingDots() {
   return (
     <span className={styles.thinking}>
@@ -120,17 +265,128 @@ function ThinkingDots() {
   );
 }
 
-/* ── Main Component ── */
-export default function ChatLayout({ messages, intentConfig, showWorkspace, phase, onFollowUp }: ChatLayoutProps) {
+/* ── Workspace summary — derived from tool calls; no more MOCK arrays ── */
+
+function WorkspaceSummary({ messages }: { messages: ChatMessage[] }) {
+  // Aggregate tools across all assistant turns.
+  const allTools = messages.flatMap((m) => m.toolCalls ?? []);
+  const doneTools = allTools.filter((t) => t.status === "done");
+  const errorTools = allTools.filter((t) => t.status === "error");
+  const freshnessChips = doneTools
+    .filter((t) => t.freshness)
+    .slice(0, 6);
+
+  // Pull citations from the most recent structured answer, if any.
+  const latestStructured = [...messages]
+    .reverse()
+    .find((m) => m.structured)?.structured;
+  const citations = latestStructured?.citations ?? [];
+
+  if (allTools.length === 0) {
+    return (
+      <div className={styles.workspaceEmpty}>
+        <div className={styles.workspaceEmptyTitle}>Workspace</div>
+        <div className={styles.workspaceEmptyText}>
+          The workspace fills in as the agent runs tools, gathers evidence,
+          and cites sources. Ask a question to get started.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.workspaceSummary}>
+      <div className={styles.reportSection}>
+        <div className={styles.reportTitle}>Tool activity</div>
+        <div className={styles.reportMeta}>
+          <span className={styles.reportBadge}>Live</span>
+          <span>
+            {doneTools.length} succeeded · {errorTools.length} failed
+          </span>
+        </div>
+      </div>
+
+      {freshnessChips.length > 0 && (
+        <div className={styles.freshnessRow}>
+          {freshnessChips.map((t, i) => (
+            <span key={i} className={styles.freshnessChip}>
+              {t.freshness?.source}: {t.freshness?.as_of ?? "n/a"}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {citations.length > 0 && (
+        <div className={styles.sourceList}>
+          <div className={styles.sourceListTitle}>Sources</div>
+          {citations.map((c, i) => (
+            <div key={i} className={styles.sourceItem}>
+              <span className={styles.sourceNum}>{i + 1}</span>
+              <div>
+                <div className={styles.sourceTitle}>{c.label}</div>
+                <div className={styles.sourceMeta}>
+                  <span>{c.source_kind}</span>
+                  {c.as_of && <span> · {c.as_of}</span>}
+                  {c.url && (
+                    <a
+                      href={c.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className={styles.sourceLink}
+                    >
+                      Open ↗
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Main Component ────────────────────────────────────────────────────── */
+
+export default function ChatLayout({
+  messages,
+  intentConfig,
+  showWorkspace,
+  phase,
+  runMeta,
+  onFollowUp,
+  onStop,
+  onRetry,
+}: ChatLayoutProps) {
   const [followUpText, setFollowUpText] = useState("");
-  const [activeTab, setActiveTab] = useState(0);
   const [mobilePane, setMobilePane] = useState<"chat" | "workspace">("chat");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // call_id → expanded? (default: first call open, others closed).
+  const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
 
-  /* Auto-scroll to bottom on any message update */
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, phase]);
+
+  // Open the first tool call by default whenever a new assistant turn begins.
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (last?.role !== "assistant") return;
+    const first = last.toolCalls?.[0];
+    if (first && !expandedTools.has(first.call_id)) {
+      setExpandedTools((prev) => new Set(prev).add(first.call_id));
+    }
+  }, [messages, expandedTools]);
+
+  const toggleTool = (call_id: string) => {
+    setExpandedTools((prev) => {
+      const next = new Set(prev);
+      if (next.has(call_id)) next.delete(call_id);
+      else next.add(call_id);
+      return next;
+    });
+  };
 
   const handleFollowUp = () => {
     const trimmed = followUpText.trim();
@@ -146,21 +402,62 @@ export default function ChatLayout({ messages, intentConfig, showWorkspace, phas
     }
   };
 
-  const tabs = intentConfig.tabs;
-  const toolCount = intentConfig.tools.length;
+  // Header status: prefer running/done state from phase; show tool count.
+  const lastAssistant = [...messages]
+    .reverse()
+    .find((m) => m.role === "assistant");
+  const toolCount = lastAssistant?.toolCalls?.length ?? 0;
+  const isRunning = phase !== "done";
+  const cost = formatTokensCost(runMeta);
 
   return (
     <div className={styles.chatLayout}>
       {/* ── Left: Chat Pane ── */}
-      <div className={cn(styles.chatPane, mobilePane === "workspace" && styles.chatPaneHidden)}>
+      <div
+        className={cn(
+          styles.chatPane,
+          mobilePane === "workspace" && styles.chatPaneHidden,
+        )}
+      >
         {/* Header */}
         <div className={styles.chatHeader}>
-          <span className={styles.chatTitle}>{intentConfig.title}</span>
-          <div className={styles.chatStatus}>
-            {phase !== "done" && <span className={styles.statusPulse} />}
-            {phase === "done"
-              ? `Completed · ${toolCount} tools`
-              : `Live · running ${toolCount} tools`}
+          <div className={styles.chatHeaderMain}>
+            <span className={styles.chatTitle}>{intentConfig.title}</span>
+            <div className={styles.chatStatus}>
+              {isRunning && <span className={styles.statusPulse} />}
+              {phase === "done"
+                ? `Completed · ${toolCount} tools`
+                : `Live · ${toolCount} tool${toolCount === 1 ? "" : "s"}`}
+            </div>
+          </div>
+          <div className={styles.chatHeaderActions}>
+            {runMeta.agent_run_id && (
+              <span
+                className={styles.runIdPill}
+                title={`run ${runMeta.agent_run_id}`}
+              >
+                {runMeta.agent_run_id.slice(0, 8)}
+              </span>
+            )}
+            {cost && <span className={styles.runCostPill}>{cost}</span>}
+            {isRunning ? (
+              <button
+                className={styles.stopBtn}
+                onClick={onStop}
+                aria-label="Stop the agent"
+                title="Stop"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <rect x="6" y="6" width="12" height="12" rx="2" />
+                </svg>
+                Stop
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -168,7 +465,14 @@ export default function ChatLayout({ messages, intentConfig, showWorkspace, phas
         <div className={styles.messages}>
           {/* Mode banner */}
           <div className={styles.modeBanner}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
             </svg>
@@ -180,7 +484,9 @@ export default function ChatLayout({ messages, intentConfig, showWorkspace, phas
               return (
                 <div key={mi} className={styles.msgUser}>
                   <div className={styles.msgRole}>
-                    <div className={styles.msgRoleIconUser}>{MOCK_USER.initials.charAt(0)}</div>
+                    <div className={styles.msgRoleIconUser}>
+                      {MOCK_USER.initials.charAt(0)}
+                    </div>
                     {MOCK_USER.name.split(" ")[0]} · just now
                   </div>
                   <div className={styles.msgUserBody}>{msg.text}</div>
@@ -189,53 +495,97 @@ export default function ChatLayout({ messages, intentConfig, showWorkspace, phas
             }
 
             /* Assistant message */
+            const showShimmer =
+              mi === messages.length - 1 && phase === "answering";
             return (
               <div key={mi} className={styles.msgAssistant}>
                 <div className={styles.msgRole}>
                   <div className={styles.msgRoleIconAssistant}>P</div>
                   PRISM{" "}
                   {msg.isThinking && <ThinkingDots />}
-                  {!msg.isThinking && msg.toolCalls && msg.visibleToolCount !== undefined && (
+                  {!msg.isThinking && msg.toolCalls && msg.toolCalls.length > 0 && (
                     <span className={styles.msgRoleInfo}>
-                      · running {msg.visibleToolCount}/{msg.toolCalls.length} tools
+                      · {msg.toolCalls.length} tool
+                      {msg.toolCalls.length === 1 ? "" : "s"}
                     </span>
                   )}
                 </div>
 
-                {/* Tool calls — revealed one by one */}
-                {msg.toolCalls && (
+                {/* Visible reasoning (when available) */}
+                {msg.thoughts && msg.thoughts.length > 0 && (
+                  <ThinkingBlock thoughts={msg.thoughts} />
+                )}
+
+                {/* Tool calls */}
+                {msg.toolCalls && msg.toolCalls.length > 0 && (
                   <div className={styles.toolCalls}>
-                    {msg.toolCalls.map((tool, ti) => (
+                    {msg.toolCalls.map((tool) => (
                       <ToolCallItem
-                        key={ti}
+                        key={tool.call_id}
                         tool={tool}
-                        visible={ti < (msg.visibleToolCount || 0)}
-                        index={ti}
+                        expanded={expandedTools.has(tool.call_id)}
+                        onToggle={() => toggleTool(tool.call_id)}
                       />
                     ))}
                   </div>
                 )}
 
-                {/* Answer — streams in word-by-word */}
-                {msg.showAnswer && msg.text && (
-                  <div className={styles.msgBodyText}>
-                    {renderTextWithCitations(msg.streamedText ?? msg.text)}
-                    {phase === "answering" && <span className={styles.streamCursor} />}
-                  </div>
-                )}
-                {msg.showAnswer && !msg.text && msg.toolCalls && (
-                  <div className={styles.msgBodyText}>
-                    {renderTextWithCitations(msg.streamedText ?? intentConfig.answer)}
-                    {phase === "answering" && <span className={styles.streamCursor} />}
+                {/* Answer */}
+                {msg.showAnswer && (msg.streamedText || msg.text) && (
+                  <div
+                    className={cn(
+                      styles.msgBodyText,
+                      showShimmer && styles.msgBodyShimmer,
+                    )}
+                  >
+                    {renderTextWithCitations(msg.streamedText || msg.text)}
+                    {showShimmer && <span className={styles.streamCursor} />}
                   </div>
                 )}
 
-                {/* Follow-up thinking */}
-                {msg.isThinking && !msg.toolCalls && (
-                  <div className={styles.msgBodyThinking}>
-                    Looking that up against the current context…
+                {/* Inline error w/ retry — persistent, not a toast */}
+                {msg.error && (
+                  <div className={styles.errorBlock} role="alert">
+                    <div className={styles.errorBlockTitle}>
+                      {msg.error.code === "timeout"
+                        ? "The agent took too long to respond."
+                        : msg.error.code === "user_aborted"
+                          ? "Stopped."
+                          : "Something went wrong."}
+                    </div>
+                    <div className={styles.errorBlockMessage}>
+                      {msg.error.message}
+                    </div>
+                    {msg.error.retriable && (
+                      <button
+                        className={styles.retryBtn}
+                        onClick={onRetry}
+                        type="button"
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <polyline points="23 4 23 10 17 10" />
+                          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                        </svg>
+                        Retry
+                      </button>
+                    )}
                   </div>
                 )}
+
+                {/* Follow-up thinking (no tool calls scheduled yet) */}
+                {msg.isThinking &&
+                  (!msg.toolCalls || msg.toolCalls.length === 0) && (
+                    <div className={styles.msgBodyThinking}>
+                      Looking that up against the current context…
+                    </div>
+                  )}
               </div>
             );
           })}
@@ -256,9 +606,14 @@ export default function ChatLayout({ messages, intentConfig, showWorkspace, phas
             onChange={(e) => setFollowUpText(e.target.value)}
             onKeyDown={handleFollowUpKeyDown}
             aria-label="Follow-up question"
-            disabled={phase !== "done"}
+            disabled={isRunning}
           />
-          <button className={styles.followUpSendBtn} onClick={handleFollowUp} aria-label="Send follow-up" disabled={phase !== "done"}>
+          <button
+            className={styles.followUpSendBtn}
+            onClick={handleFollowUp}
+            aria-label="Send follow-up"
+            disabled={isRunning || !followUpText.trim()}
+          >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="22" y1="2" x2="11" y2="13" />
               <polygon points="22 2 15 22 11 13 2 9 22 2" />
@@ -268,92 +623,62 @@ export default function ChatLayout({ messages, intentConfig, showWorkspace, phas
 
         {/* Mobile pane switcher */}
         <div className={styles.paneSwitcher}>
-          <button className={mobilePane === "chat" ? styles.paneSwitcherBtnActive : styles.paneSwitcherBtn} onClick={() => setMobilePane("chat")}>Chat</button>
-          <button className={mobilePane === "workspace" ? styles.paneSwitcherBtnActive : styles.paneSwitcherBtn} onClick={() => setMobilePane("workspace")}>Workspace</button>
+          <button
+            className={
+              mobilePane === "chat" ? styles.paneSwitcherBtnActive : styles.paneSwitcherBtn
+            }
+            onClick={() => setMobilePane("chat")}
+          >
+            Chat
+          </button>
+          <button
+            className={
+              mobilePane === "workspace"
+                ? styles.paneSwitcherBtnActive
+                : styles.paneSwitcherBtn
+            }
+            onClick={() => setMobilePane("workspace")}
+          >
+            Workspace
+          </button>
         </div>
       </div>
 
       {/* ── Right: Workspace Pane ── */}
       {showWorkspace && (
-        <div className={cn(styles.workspacePane, mobilePane === "workspace" && styles.workspacePaneVisible)}>
+        <div
+          className={cn(
+            styles.workspacePane,
+            mobilePane === "workspace" && styles.workspacePaneVisible,
+          )}
+        >
           <div className={styles.workspaceHeader}>
-            <div className={styles.workspaceTabs}>
-              {tabs.map((tab, i) => (
-                <button key={tab} className={i === activeTab ? styles.workspaceTabActive : styles.workspaceTab} onClick={() => setActiveTab(i)}>
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                </button>
-              ))}
-            </div>
-            <div className={styles.workspaceActions}>
-              <button className={styles.workspaceActionBtn} title="Export">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                Export
-              </button>
-              <button className={styles.workspaceActionBtn} title="Save">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                  <polyline points="17 21 17 13 7 13 7 21" />
-                  <polyline points="7 3 7 8 15 8" />
-                </svg>
-                Save
-              </button>
-            </div>
+            <div className={styles.workspaceTitle}>Workspace</div>
           </div>
-
           <div className={styles.workspaceContent}>
-            <div className={styles.reportSection}>
-              <div className={styles.reportTitle}>{intentConfig.title}</div>
-              <div className={styles.reportMeta}>
-                <span className={styles.reportBadge}>Auto-generated</span>
-                <span>Generated just now</span>
-                <span>{MOCK_SOURCES.length} sources</span>
-              </div>
-            </div>
-
-            <div className={styles.kpiGrid}>
-              {MOCK_KPIS.map((kpi, i) => (
-                <div key={i} className={styles.kpiCard}>
-                  <div className={styles.kpiLabel}>{kpi.label}</div>
-                  <div className={styles.kpiValue}>{kpi.value}</div>
-                  <div className={kpi.pos ? styles.kpiDeltaPos : styles.kpiDeltaNeg}>{kpi.delta}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className={styles.chartContainer}>
-              <div className={styles.chartTitle}>Revenue Trend — 5 Quarters</div>
-              <svg className={styles.chartSvg} viewBox="0 0 400 120" preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.15" />
-                    <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <polyline fill="none" stroke="var(--accent)" strokeWidth="2" points="0,90 80,75 160,60 240,45 320,35 400,20" />
-                <polygon fill="url(#areaGrad)" points="0,90 80,75 160,60 240,45 320,35 400,20 400,120 0,120" />
-              </svg>
-            </div>
-
-            <div className={styles.sourceList}>
-              {MOCK_SOURCES.map((src) => (
-                <div key={src.num} className={styles.sourceItem}>
-                  <span className={styles.sourceNum}>{src.num}</span>
-                  <div>
-                    <div className={styles.sourceTitle}>{src.title}</div>
-                    <div className={styles.sourceMeta}>{src.meta}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <WorkspaceSummary messages={messages} />
           </div>
-
           <div className={styles.paneSwitcher}>
-            <button className={mobilePane === "chat" ? styles.paneSwitcherBtnActive : styles.paneSwitcherBtn} onClick={() => setMobilePane("chat")}>Chat</button>
-            <button className={mobilePane === "workspace" ? styles.paneSwitcherBtnActive : styles.paneSwitcherBtn} onClick={() => setMobilePane("workspace")}>Workspace</button>
+            <button
+              className={
+                mobilePane === "chat"
+                  ? styles.paneSwitcherBtnActive
+                  : styles.paneSwitcherBtn
+              }
+              onClick={() => setMobilePane("chat")}
+            >
+              Chat
+            </button>
+            <button
+              className={
+                mobilePane === "workspace"
+                  ? styles.paneSwitcherBtnActive
+                  : styles.paneSwitcherBtn
+              }
+              onClick={() => setMobilePane("workspace")}
+            >
+              Workspace
+            </button>
           </div>
         </div>
       )}
