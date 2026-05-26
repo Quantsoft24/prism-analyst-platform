@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { cn } from "@/lib/utils";
 import { MOCK_USER, type IntentConfig } from "@/lib/mockData";
+import { useToast } from "@/components/Toast";
+import type { Citation } from "@/lib/api/chat";
 import type {
   AgentThought,
   ChatMessage,
@@ -27,26 +31,208 @@ interface ChatLayoutProps {
   onRetry: () => void;
 }
 
-/* ── Citation renderer — inline `[n]` markers ──────────────────────────── */
-function renderTextWithCitations(text: string): React.ReactNode[] {
+/* ── Citation popover ──────────────────────────────────────────────────
+ * A `[n]` marker in the prose surfaces a hover/focus card with the matching
+ * Citation's label, source kind, date, and (if present) an external link.
+ * Pure CSS hover/focus — no Radix needed for this one. */
+
+function CitationMarker({
+  index,
+  citation,
+}: {
+  index: number;
+  citation: Citation | undefined;
+}) {
+  return (
+    <span className={styles.citeWrap} tabIndex={0}>
+      <span
+        className={styles.cite}
+        aria-describedby={`cite-${index}`}
+        title={citation?.label ?? `Source ${index}`}
+      >
+        {index}
+      </span>
+      {citation && (
+        <span
+          id={`cite-${index}`}
+          role="tooltip"
+          className={styles.citePopover}
+        >
+          <span className={styles.citePopoverLabel}>{citation.label}</span>
+          <span className={styles.citePopoverMeta}>
+            <span className={styles.citePopoverKind}>{citation.source_kind}</span>
+            {citation.as_of && <span>· {citation.as_of}</span>}
+          </span>
+          {citation.url && (
+            <a
+              href={citation.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className={styles.citePopoverLink}
+            >
+              Open source ↗
+            </a>
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** Split a text run on `[n]` markers and render each as a CitationMarker. */
+function renderTextWithCitations(
+  text: string,
+  citations: Citation[],
+): React.ReactNode[] {
   const parts = text.split(/(\[\d+\])/g);
   return parts.map((part, i) => {
     const match = part.match(/^\[(\d+)\]$/);
     if (match) {
+      const n = Number(match[1]);
       return (
-        <span key={i} className={styles.cite} title={`Source ${match[1]}`}>
-          {match[1]}
-        </span>
+        <CitationMarker key={i} index={n} citation={citations[n - 1]} />
       );
     }
-    const boldParts = part.split(/(\*\*[^*]+\*\*)/g);
-    return boldParts.map((bp, j) => {
-      if (bp.startsWith("**") && bp.endsWith("**")) {
-        return <strong key={`${i}-${j}`}>{bp.slice(2, -2)}</strong>;
-      }
-      return <span key={`${i}-${j}`}>{bp}</span>;
-    });
+    return <span key={i}>{part}</span>;
   });
+}
+
+/** ReactMarkdown component overrides — paragraphs / lists / inline + citation
+ * markers. Closes over the citations list so paragraphs can resolve [n] refs. */
+type MdProps = { children?: React.ReactNode };
+type MdAnchorProps = MdProps & { href?: string };
+
+function makeMarkdownComponents(citations: Citation[]) {
+  function withCites(children: React.ReactNode): React.ReactNode {
+    // Walk children: for each string node, replace [n] with CitationMarker.
+    const out: React.ReactNode[] = [];
+    React.Children.forEach(children, (child, i) => {
+      if (typeof child === "string") {
+        out.push(...renderTextWithCitations(child, citations));
+      } else {
+        out.push(<React.Fragment key={`mc-${i}`}>{child}</React.Fragment>);
+      }
+    });
+    return out;
+  }
+  return {
+    p: ({ children }: MdProps) => <p>{withCites(children)}</p>,
+    li: ({ children }: MdProps) => <li>{withCites(children)}</li>,
+    em: ({ children }: MdProps) => <em>{withCites(children)}</em>,
+    strong: ({ children }: MdProps) => <strong>{withCites(children)}</strong>,
+    a: ({ href, children }: MdAnchorProps) => (
+      <a href={href} target="_blank" rel="noreferrer noopener">
+        {children}
+      </a>
+    ),
+  };
+}
+
+/* ── Answer block — markdown + confidence chip + copy + citation list ──── */
+
+function AnswerBlock({
+  text,
+  citations,
+  shimmer,
+  structured,
+}: {
+  text: string;
+  citations: Citation[];
+  shimmer: boolean;
+  structured: { confidence?: "high" | "medium" | "low"; data_freshness?: string | null } | null;
+}) {
+  const { toast } = useToast();
+  const components = React.useMemo(
+    () => makeMarkdownComponents(citations),
+    [citations],
+  );
+
+  const handleCopy = async () => {
+    try {
+      // Plain answer + citation footnotes appended as markdown.
+      const footnotes = citations.length
+        ? "\n\n---\n" +
+          citations
+            .map((c, i) => `[${i + 1}] ${c.label}${c.url ? ` — ${c.url}` : ""}`)
+            .join("\n")
+        : "";
+      await navigator.clipboard.writeText(text + footnotes);
+      toast("Answer copied", "success");
+    } catch {
+      toast("Copy failed", "error");
+    }
+  };
+
+  const confidence = structured?.confidence;
+  const freshness = structured?.data_freshness;
+
+  return (
+    <div className={styles.answerBlock}>
+      <div
+        className={cn(
+          styles.msgBodyText,
+          shimmer && styles.msgBodyShimmer,
+          styles.answerProse,
+        )}
+      >
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+          {text}
+        </ReactMarkdown>
+        {shimmer && <span className={styles.streamCursor} />}
+      </div>
+      {(confidence || freshness || citations.length > 0 || !shimmer) && (
+        <div className={styles.answerFooter}>
+          <div className={styles.answerChips}>
+            {confidence && (
+              <span
+                className={cn(
+                  styles.confidenceChip,
+                  confidence === "high" && styles.confidenceHigh,
+                  confidence === "medium" && styles.confidenceMedium,
+                  confidence === "low" && styles.confidenceLow,
+                )}
+                title="Agent's self-reported confidence"
+              >
+                {confidence} confidence
+              </span>
+            )}
+            {freshness && (
+              <span className={styles.freshnessChip} title="Earliest source date">
+                as of {freshness}
+              </span>
+            )}
+            {citations.length > 0 && (
+              <span className={styles.citeCountChip}>
+                {citations.length} citation{citations.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
+          {!shimmer && (
+            <button
+              type="button"
+              className={styles.copyBtn}
+              onClick={handleCopy}
+              aria-label="Copy answer to clipboard"
+              title="Copy"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <rect x="9" y="9" width="13" height="13" rx="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              Copy
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ── Format helpers ────────────────────────────────────────────────────── */
@@ -530,17 +716,15 @@ export default function ChatLayout({
                   </div>
                 )}
 
-                {/* Answer */}
+                {/* Answer — markdown rendered (GFM tables/lists/code),
+                    with [n] markers turning into hover citation popovers. */}
                 {msg.showAnswer && (msg.streamedText || msg.text) && (
-                  <div
-                    className={cn(
-                      styles.msgBodyText,
-                      showShimmer && styles.msgBodyShimmer,
-                    )}
-                  >
-                    {renderTextWithCitations(msg.streamedText || msg.text)}
-                    {showShimmer && <span className={styles.streamCursor} />}
-                  </div>
+                  <AnswerBlock
+                    text={msg.streamedText || msg.text}
+                    citations={msg.structured?.citations ?? []}
+                    shimmer={showShimmer}
+                    structured={msg.structured ?? null}
+                  />
                 )}
 
                 {/* Inline error w/ retry — persistent, not a toast */}

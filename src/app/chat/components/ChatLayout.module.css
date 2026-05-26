@@ -1026,3 +1026,216 @@
 .sourceLink:hover {
   text-decoration: underline;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Pass-4 additions — markdown answer block, citation popovers, copy + chips
+ * ───────────────────────────────────────────────────────────────────── */
+
+.answerBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Tighten the spacing react-markdown produces by default. */
+.answerProse :global(p) {
+  margin: 0 0 0.6em 0;
+  line-height: 1.6;
+}
+.answerProse :global(p:last-child) {
+  margin-bottom: 0;
+}
+.answerProse :global(ul),
+.answerProse :global(ol) {
+  margin: 0.4em 0 0.6em 1.4em;
+  padding: 0;
+}
+.answerProse :global(li) {
+  margin-bottom: 0.2em;
+  line-height: 1.55;
+}
+.answerProse :global(code) {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 1px 5px;
+  background: var(--bg-tint, rgba(0, 0, 0, 0.04));
+  border-radius: 4px;
+}
+.answerProse :global(pre) {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 10px 12px;
+  margin: 0.6em 0;
+  background: var(--bg-sunken, rgba(0, 0, 0, 0.04));
+  border-radius: 6px;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+.answerProse :global(pre code) {
+  padding: 0;
+  background: none;
+}
+.answerProse :global(a) {
+  color: var(--accent, #8b6f3f);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+.answerProse :global(table) {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  font-size: 0.95em;
+}
+.answerProse :global(th),
+.answerProse :global(td) {
+  padding: 4px 10px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  text-align: left;
+}
+.answerProse :global(th) {
+  background: var(--bg-tint, rgba(0, 0, 0, 0.03));
+  font-weight: 600;
+}
+.answerProse :global(blockquote) {
+  margin: 0.6em 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--line, rgba(0, 0, 0, 0.15));
+  color: var(--ink-soft, #2e3a48);
+}
+
+/* Citation popover — inline hover/focus card */
+.citeWrap {
+  position: relative;
+  display: inline-block;
+  outline: none;
+}
+.citePopover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  width: max-content;
+  max-width: 280px;
+  padding: 10px 12px;
+  background: var(--bg-elev, #ffffff);
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 8px;
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.08));
+  font-family: var(--font-body);
+  text-align: left;
+  z-index: 12;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.citeWrap:hover .citePopover,
+.citeWrap:focus-within .citePopover {
+  display: flex;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+.citePopoverLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink, #1a1a1a);
+  line-height: 1.4;
+}
+.citePopoverMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ink-mute, #6b7785);
+}
+.citePopoverKind {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-tint, rgba(0, 0, 0, 0.04));
+  color: var(--ink-mute, #6b7785);
+}
+.citePopoverLink {
+  font-size: 12px;
+  color: var(--accent, #8b6f3f);
+  text-decoration: none;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.citePopoverLink:hover {
+  text-decoration: underline;
+}
+
+/* Answer footer — confidence + freshness + cite count + copy */
+.answerFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 6px;
+}
+.answerChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.confidenceChip,
+.citeCountChip {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: lowercase;
+}
+.confidenceChip {
+  font-weight: 600;
+}
+.confidenceHigh {
+  background: var(--pos-soft, #dde9df);
+  color: var(--pos, #2f6b47);
+}
+.confidenceMedium {
+  background: var(--warn-soft, #f2e5c9);
+  color: var(--warn, #b07d1f);
+}
+.confidenceLow {
+  background: var(--neg-soft, #efd9d2);
+  color: var(--neg, #a53f2d);
+}
+.citeCountChip {
+  background: var(--bg-tint, rgba(0, 0, 0, 0.04));
+  color: var(--ink-mute, #6b7785);
+}
+
+.copyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-mute, #6b7785);
+  background: transparent;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+.copyBtn:hover {
+  background: var(--bg-tint, rgba(0, 0, 0, 0.04));
+  color: var(--ink, #1a1a1a);
+  border-color: var(--line-soft, rgba(0, 0, 0, 0.15));
+}
