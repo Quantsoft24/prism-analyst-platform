@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   runChatStream,
   type AgentThoughtEvent,
+  type ChartEvent,
   type ChatStreamHandle,
   type Citation,
   type DataFreshnessEvent,
@@ -64,6 +65,10 @@ export interface RunMeta {
   latency_ms: number | null;
 }
 
+/** A chart attached to this turn (Workspace → Charts tab). Same shape the
+ *  backend emits in a ChartEvent — we just collect them keyed by chart_id. */
+export type AssistantChart = Omit<ChartEvent, "type">;
+
 export interface ChatMessage {
   role: "user" | "assistant";
   text: string;
@@ -75,6 +80,8 @@ export interface ChatMessage {
   showAnswer?: boolean;
   /** Parsed <answer_meta> structured payload (citations, confidence, freshness). */
   structured?: FinalAnswer | null;
+  /** Charts the agent surfaced during this turn. */
+  charts?: AssistantChart[];
   /** Terminal error if the run failed for this assistant turn. */
   error?: ErrorEvent | null;
 }
@@ -174,15 +181,24 @@ export function useChat(): UseChatReturn {
       const intentBase = INTENT_CONFIGS[intent];
       setActiveIntent(intent);
 
-      const liveConfig: IntentConfig = {
-        title: deriveTitle(query),
-        statusMsg: "Live · running 0 tools",
-        tools: [],
-        answer: "",
-        contextTag: intentBase.contextTag,
-        tabs: intentBase.tabs,
-      };
-      setIntentConfig(liveConfig);
+      // Title preservation: on a follow-up keep the ORIGINAL chat title
+      // (typing "ok" should NOT rename the chat to "ok"). Only the first
+      // user turn — i.e. ``isFollowUp === false`` — sets the title from
+      // the query. Tabs / contextTag stay in sync with the latest intent
+      // so the workspace can still flip layouts if the user pivots
+      // ("compare X and Y" → compare tabs).
+      setIntentConfig((prev) =>
+        isFollowUp && prev
+          ? { ...prev, contextTag: intentBase.contextTag, tabs: intentBase.tabs }
+          : {
+              title: deriveTitle(query),
+              statusMsg: "Live · running 0 tools",
+              tools: [],
+              answer: "",
+              contextTag: intentBase.contextTag,
+              tabs: intentBase.tabs,
+            },
+      );
       setRunMeta(EMPTY_META);
 
       // Seed the message list with the user message + an empty assistant turn.
@@ -276,6 +292,24 @@ export function useChat(): UseChatReturn {
                   freshness: buffered ?? tools[idx].freshness,
                 };
                 return { ...msg, toolCalls: tools };
+              }),
+            );
+          },
+
+          onChart: (event: ChartEvent) => {
+            // Append (or replace by chart_id) on the latest assistant turn.
+            setMessages((prev) =>
+              updateLastAssistant(prev, (msg) => {
+                const existing = msg.charts ?? [];
+                const idx = existing.findIndex(
+                  (c) => c.chart_id === event.chart_id,
+                );
+                const next = existing.slice();
+                // Drop the discriminant `type` — assistant stores raw shape.
+                const { type: _t, ...payload } = event;
+                if (idx >= 0) next[idx] = payload;
+                else next.push(payload);
+                return { ...msg, charts: next };
               }),
             );
           },
@@ -468,6 +502,7 @@ function newAssistantStub(): ChatMessage {
     isThinking: true,
     thoughts: [],
     toolCalls: [],
+    charts: [],
     showAnswer: false,
     streamedText: "",
     structured: null,

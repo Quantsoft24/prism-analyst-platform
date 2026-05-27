@@ -1,7 +1,10 @@
 "use client";
 
+import * as React from "react";
+
 import { type NavView, NAV_ITEMS, RECENT_CHATS, MOCK_USER } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
+import { isMockModeEnabled, setMockMode } from "@/lib/api/chat";
 import Tooltip from "./Tooltip";
 
 import styles from "./Sidebar.module.css";
@@ -272,6 +275,7 @@ export default function Sidebar({
               <div className={styles.userFirm}>{MOCK_USER.firm}</div>
             </div>
           )}
+          <MockModeToggle collapsed={collapsed} />
           <Tooltip
             label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
             side="right"
@@ -287,5 +291,66 @@ export default function Sidebar({
         </div>
       </aside>
     </>
+  );
+}
+
+/* ── Mock-mode toggle ──────────────────────────────────────────────────────
+ * Lets us iterate on the chat UI without burning Gemini tokens. When ON,
+ * `runChatStream` delegates to a scripted local simulator (see chat.mock.ts).
+ * Visible state: amber outline + "MOCK" badge so we can't forget it's on.
+ *
+ * REMOVE this component (and the badge / sidebar wiring above) before
+ * shipping to production. Keep chat.mock.ts behind a feature flag if you
+ * want a longer-lived demo / e2e affordance.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+const MockOnIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+  </svg>
+);
+const MockOffIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+  </svg>
+);
+
+function MockModeToggle({ collapsed }: { collapsed: boolean }) {
+  // Read-time check so we don't ship a hard-coded default — honors the
+  // localStorage flag from prior sessions. State + tiny re-render dance
+  // because localStorage isn't reactive.
+  const [on, setOn] = React.useState(false);
+  React.useEffect(() => {
+    setOn(isMockModeEnabled());
+  }, []);
+
+  const toggle = () => {
+    const next = !on;
+    setMockMode(next);
+    setOn(next);
+  };
+
+  const label = on
+    ? "Mock mode ON · UI runs against scripted events, no backend call"
+    : "Mock mode OFF · click to simulate chat without calling the agent";
+
+  return (
+    <Tooltip label={label} side="right">
+      <button
+        type="button"
+        onClick={toggle}
+        className={cn(styles.themeToggle, on && styles.mockToggleOn)}
+        aria-pressed={on}
+        aria-label={on ? "Disable mock mode" : "Enable mock mode"}
+      >
+        {on ? <MockOnIcon /> : <MockOffIcon />}
+        {!collapsed && on && (
+          <span className={styles.mockBadge} aria-hidden="true">
+            MOCK
+          </span>
+        )}
+      </button>
+    </Tooltip>
   );
 }

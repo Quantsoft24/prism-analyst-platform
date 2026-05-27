@@ -332,6 +332,34 @@
   height: 14px;
 }
 
+/* Mock-mode toggle — reuses .themeToggle base but pulses amber when ON
+ * so it's impossible to forget the chat is on the simulator. */
+.mockToggleOn {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: var(--warn);
+  position: relative;
+}
+.mockToggleOn:hover {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.mockBadge {
+  position: absolute;
+  top: -7px;
+  right: -10px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--warn);
+  color: var(--text-on-accent, #fff);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 /* ── Mobile ── */
 .backdrop {
   display: none;
