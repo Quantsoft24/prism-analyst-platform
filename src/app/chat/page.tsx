@@ -138,7 +138,10 @@ export default function ChatPage() {
             intentConfig={chat.intentConfig}
             showWorkspace={chat.showWorkspace}
             phase={chat.phase}
+            runMeta={chat.runMeta}
             onFollowUp={chat.followUp}
+            onStop={chat.stop}
+            onRetry={chat.retry}
           />
         ) : null;
     }

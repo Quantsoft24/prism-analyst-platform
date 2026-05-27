@@ -22,6 +22,12 @@ export function useKeyboard(shortcuts: ShortcutMap) {
         e.preventDefault();
         shortcuts["mod+n"]?.();
       }
+      // ⌘B / Ctrl+B — toggle sidebar (industry-standard shortcut used by
+      // Claude, ChatGPT, VS Code, etc.)
+      if (mod && (e.key === "b" || e.key === "B")) {
+        e.preventDefault();
+        shortcuts["mod+b"]?.();
+      }
       if (e.key === "Escape") {
         shortcuts["escape"]?.();
       }

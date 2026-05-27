@@ -3,6 +3,13 @@
   grid-template-columns: 1fr 1fr;
   height: 100%;
   overflow: hidden;
+  transition: grid-template-columns 220ms ease;
+}
+
+/* When the workspace pane is collapsed (or never opened), the chat pane
+ * fills the full width — symmetric with the left-sidebar collapse. */
+.chatLayoutFull {
+  grid-template-columns: 1fr;
 }
 
 .chatPane {
@@ -10,6 +17,42 @@
   flex-direction: column;
   border-right: 1px solid var(--line);
   overflow: hidden;
+}
+/* No right border when there's nothing to its right. */
+.chatLayoutFull .chatPane {
+  border-right: none;
+}
+
+/* Workspace toggle button — sits in the chat header actions row, mirrors
+ * the sidebar's collapse chevron pattern. */
+.workspaceToggleBtn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+.workspaceToggleBtn:hover {
+  background: var(--bg-tint);
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+.workspaceToggleBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (max-width: 900px) {
+  .workspaceToggleBtn {
+    display: none;
+  }
 }
 
 .chatHeader {
@@ -71,39 +114,79 @@
   color: var(--ink-faint);
 }
 
-/* ── Message Role Header ── */
+/* Mode tabs (Single | Compare | Watchlist) — sit on the right of the
+   research-mode banner. Matches the Lakshya mockup .mode-banner-tabs. */
+.modeBannerTabs {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  background: var(--bg-elev);
+  padding: 2px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+}
+.modeTab {
+  padding: 4px 10px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-mute);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+.modeTab:hover:not(:disabled) {
+  color: var(--ink);
+}
+.modeTabActive {
+  background: var(--ink);
+  color: var(--bg-elev);
+}
+.modeTab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Message Role Header — Lakshya mockup: uppercase eyebrow + 22×22 square icon */
 .msgRole {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 10px;
+  font-weight: 500;
   color: var(--ink-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
   margin-bottom: 8px;
 }
 
 .msgRoleIconUser {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   background: var(--accent);
-  color: white;
-  border-radius: 50%;
+  color: var(--text-on-accent, white);
+  border-radius: 4px;
   display: grid;
   place-items: center;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 12px;
   font-weight: 600;
-  font-size: 11px;
   flex-shrink: 0;
 }
 
 .msgRoleIconAssistant {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   background: var(--ink);
-  color: var(--accent);
-  border-radius: 6px;
+  color: var(--bg-elev);
+  border-radius: 4px;
   display: grid;
   place-items: center;
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   font-style: italic;
   flex-shrink: 0;
@@ -190,32 +273,40 @@
   animation-delay: 0.32s;
 }
 
-/* ── Tool Calls ── */
+/* ── Tool Calls — Lakshya mockup pattern ─────────────────────────────────
+ * Outer card: white bg + line border.
+ * Header strip: bg-tint, hovers to line-soft.
+ * Body (when expanded): white bg, mono font, syntax-highlighted JSON. */
 .toolCalls {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .toolCall {
-  background: var(--bg-tint);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background var(--transition-fast);
-  animation: fadeUp 0.3s ease;
   overflow: hidden;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  animation: fadeUp 0.3s ease;
 }
-
 .toolCall:hover {
-  background: var(--bg-sunken);
+  border-color: var(--ink-faint);
 }
 
 .toolCallHeader {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 10px;
+  padding: 10px 14px;
   font-size: 12px;
+  background: var(--bg-tint);
+  transition: background var(--transition-fast);
+}
+.toolCallHeader:hover {
+  background: var(--line-soft);
 }
 
 .toolCallIcon {
@@ -276,18 +367,25 @@
   transform: rotate(90deg);
 }
 
-/* ── Tool Call Body (expand) ── */
+/* ── Tool Call Body (expand) — mockup-style INPUT/OUTPUT sections ────── */
 .toolCallBody {
-  padding: 0 12px 10px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-soft);
   animation: fadeUp 0.2s ease;
 }
 
 .toolCallSection {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
   font-size: 11px;
 }
 
@@ -295,19 +393,31 @@
   color: var(--ink-mute);
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  flex-shrink: 0;
-  width: 48px;
+  letter-spacing: 0.08em;
+  font-size: 9px;
+  font-family: var(--font-body);
 }
 
 .toolCallValue {
-  color: var(--ink-soft);
+  color: var(--ink);
   font-family: var(--font-mono);
   font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
+/* Inline syntax-highlight spans inside .toolCallValue */
 .key {
+  color: var(--info);
+}
+.str {
+  color: var(--pos);
+}
+.num {
   color: var(--accent);
+}
+.punct {
+  color: var(--ink-mute);
 }
 
 /* ── Citations ── */
@@ -335,85 +445,112 @@
   color: white;
 }
 
-/* ── Follow-up Composer ── */
-.followUpComposer {
-  padding: 14px 20px;
-  border-top: 1px solid var(--line);
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* ── Composer — Lakshya mockup pattern ──────────────────────────────────
+ * .composerBar (border-top, padding) → .composerBox (border, focus-glow) →
+ * textarea + composerToolbar with composerTag chips + dark composerSend.
+ * This replaces the older flat .followUpComposer / followUpInput layout. */
+.composerBar {
   flex-shrink: 0;
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
 }
 
-.followUpInput {
-  flex: 1;
-  background: var(--bg-tint);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-lg);
-  padding: 10px 14px;
-  font-size: 13px;
-  font-family: inherit;
-  color: var(--ink);
+.composerBox {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+.composerBox:focus-within {
+  border-color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+.composerTextarea {
+  width: 100%;
+  background: transparent;
+  border: none;
   outline: none;
-  transition: border-color var(--transition-fast);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  resize: none;
+  min-height: 40px;
+  line-height: 1.5;
 }
-
-.followUpInput::placeholder {
-  color: var(--ink-faint);
+.composerTextarea::placeholder {
+  color: var(--ink-mute);
 }
-
-.followUpInput:focus {
-  border-color: var(--accent);
-}
-
-.followUpInput:disabled {
+.composerTextarea:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.followUpTags {
+.composerToolbar {
   display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.composerTag {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
-}
-
-.followUpTag {
-  font-size: 10px;
-  font-family: var(--font-mono);
-  color: var(--ink-mute);
-  padding: 2px 6px;
+  background: var(--bg-tint);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--ink-soft);
+  cursor: default;
+}
+.composerTag svg {
+  width: 10px;
+  height: 10px;
+  color: var(--ink-mute);
+}
+.composerTagX {
+  color: var(--ink-mute);
+  cursor: pointer;
+  margin-left: 2px;
+  padding: 0 2px;
+}
+.composerTagX:hover {
+  color: var(--ink);
 }
 
-.followUpSendBtn {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+.composerSend {
+  margin-left: auto;
   background: var(--ink);
   color: var(--bg-elev);
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
   display: grid;
   place-items: center;
-  cursor: pointer;
-  transition: transform var(--transition-fast);
+  transition:
+    transform var(--transition-fast),
+    background var(--transition-fast);
   flex-shrink: 0;
 }
-
-.followUpSendBtn:hover {
+.composerSend:hover:not(:disabled) {
   transform: translateY(-1px);
+  background: var(--accent);
 }
-
-.followUpSendBtn:disabled {
-  opacity: 0.3;
+.composerSend:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
-
-.followUpSendBtn:disabled:hover {
-  transform: none;
-}
-
-.followUpSendBtn svg {
-  width: 14px;
-  height: 14px;
+.composerSend svg {
+  width: 12px;
+  height: 12px;
 }
 
 /* ── Workspace Pane ── */
@@ -505,6 +642,18 @@
 .reportSection {
   margin-bottom: 24px;
   animation: fadeUp 0.4s ease;
+}
+
+/* Anomaly callouts in the Report tab (FinalAnswer.section.kind === "anomaly").
+ * Left-bar accent + warn-soft background so analysts notice flagged items. */
+.reportSectionAnomaly {
+  background: var(--warn-soft);
+  border-left: 3px solid var(--warn);
+  padding: 12px 16px;
+  border-radius: 0 6px 6px 0;
+}
+.reportSectionAnomaly .reportSectionTitle {
+  color: var(--warn);
 }
 
 .reportTitle {
@@ -708,15 +857,1074 @@
     padding: 14px;
   }
 
-  .followUpComposer {
-    padding: 10px 14px;
+  .composerBar {
+    padding: 10px 14px 14px;
   }
 
   .kpiGrid {
     grid-template-columns: 1fr 1fr;
   }
+}
 
-  .followUpTags {
-    display: none;
+/* ─────────────────────────────────────────────────────────────────────────
+ * Pass-2 additions — Claude-like agentic surface:
+ *   • header actions (stop, run-id pill, cost pill)
+ *   • streaming shimmer on the answer
+ *   • thinking block (reasoning, collapsible)
+ *   • real tool I/O (error variant, freshness chip, next-action chip)
+ *   • inline error block w/ retry button
+ *   • derived workspace summary
+ * ───────────────────────────────────────────────────────────────────── */
+
+.chatHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.chatHeaderMain {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+.chatHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.runIdPill,
+.runCostPill {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-2, rgba(0, 0, 0, 0.04));
+  color: var(--text-muted, #6b6b6b);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  white-space: nowrap;
+}
+
+.stopBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--neg, #c1272d);
+  background: rgba(193, 39, 45, 0.08);
+  border: 1px solid rgba(193, 39, 45, 0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.stopBtn:hover {
+  background: rgba(193, 39, 45, 0.15);
+  border-color: rgba(193, 39, 45, 0.5);
+}
+
+/* Streaming shimmer on the answer text while phase==="answering". */
+@keyframes prismShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+.msgBodyShimmer {
+  background: linear-gradient(
+    90deg,
+    var(--ink, #1a1a1a) 0%,
+    var(--ink, #1a1a1a) 35%,
+    var(--accent, #8b6f3f) 50%,
+    var(--ink, #1a1a1a) 65%,
+    var(--ink, #1a1a1a) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: prismShimmer 2.4s linear infinite;
+}
+
+/* Thinking block (agent reasoning) */
+.thinkingBlock {
+  margin: 8px 0 12px;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  border-radius: 8px;
+  background: var(--surface-2, rgba(0, 0, 0, 0.02));
+  overflow: hidden;
+}
+.thinkingBlockHeader {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, #6b6b6b);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.thinkingChevron {
+  transition: transform 0.15s;
+}
+.thinkingChevronOpen {
+  transform: rotate(180deg);
+}
+.thinkingList {
+  list-style: none;
+  margin: 0;
+  padding: 4px 12px 10px 12px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-muted, #6b6b6b);
+}
+.thinkingItem {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 4px 0;
+  line-height: 1.5;
+}
+.thinkingKind {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--surface-3, rgba(0, 0, 0, 0.05));
+  color: var(--text-muted, #6b6b6b);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Tool-call error variant + retry indicator */
+.toolCallError {
+  border-left: 3px solid var(--neg, #c1272d);
+}
+.toolCallFailed {
+  color: var(--neg, #c1272d);
+}
+.toolCallRetry {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--warn, #b8862c);
+  margin-left: 4px;
+}
+.toolCallCode {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--surface-3, rgba(0, 0, 0, 0.05));
+  color: var(--ink, #1a1a1a);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.toolCallCodeError {
+  background: rgba(193, 39, 45, 0.08);
+  color: var(--neg, #c1272d);
+}
+
+.errorCodeChip,
+.nextActionChip,
+.freshnessChip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-left: 6px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.errorCodeChip {
+  background: rgba(193, 39, 45, 0.1);
+  color: var(--neg, #c1272d);
+}
+.nextActionChip {
+  background: rgba(184, 134, 44, 0.1);
+  color: var(--warn, #b8862c);
+}
+.freshnessChip {
+  background: rgba(139, 111, 63, 0.1);
+  color: var(--accent, #8b6f3f);
+  font-family: var(--font-body);
+  text-transform: lowercase;
+  margin-left: 0;
+}
+
+/* Inline error block w/ retry */
+.errorBlock {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(193, 39, 45, 0.3);
+  background: rgba(193, 39, 45, 0.05);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.errorBlockTitle {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neg, #c1272d);
+}
+.errorBlockMessage {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-muted, #6b6b6b);
+  line-height: 1.5;
+}
+.retryBtn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 6px 12px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent, #8b6f3f);
+  background: var(--elevated, #fff);
+  border: 1px solid var(--accent, #8b6f3f);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.retryBtn:hover {
+  background: rgba(139, 111, 63, 0.08);
+}
+
+/* Workspace summary — derived from tool calls */
+.workspaceTitle {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink, #1a1a1a);
+}
+.workspaceSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.workspaceEmpty {
+  padding: 32px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.workspaceEmptyTitle {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink, #1a1a1a);
+}
+.workspaceEmptyText {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-muted, #6b6b6b);
+  line-height: 1.6;
+  max-width: 38ch;
+  margin: 0 auto;
+}
+.freshnessRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sourceListTitle {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #6b6b6b);
+  margin-bottom: 8px;
+}
+.sourceLink {
+  margin-left: 6px;
+  color: var(--accent, #8b6f3f);
+  text-decoration: none;
+  font-weight: 600;
+}
+.sourceLink:hover {
+  text-decoration: underline;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Pass-4 additions — markdown answer block, citation popovers, copy + chips
+ * ───────────────────────────────────────────────────────────────────── */
+
+.answerBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Tighten the spacing react-markdown produces by default. */
+.answerProse :global(p) {
+  margin: 0 0 0.6em 0;
+  line-height: 1.6;
+}
+.answerProse :global(p:last-child) {
+  margin-bottom: 0;
+}
+.answerProse :global(ul),
+.answerProse :global(ol) {
+  margin: 0.4em 0 0.6em 1.4em;
+  padding: 0;
+}
+.answerProse :global(li) {
+  margin-bottom: 0.2em;
+  line-height: 1.55;
+}
+.answerProse :global(code) {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 1px 5px;
+  background: var(--bg-tint, rgba(0, 0, 0, 0.04));
+  border-radius: 4px;
+}
+.answerProse :global(pre) {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 10px 12px;
+  margin: 0.6em 0;
+  background: var(--bg-sunken, rgba(0, 0, 0, 0.04));
+  border-radius: 6px;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+.answerProse :global(pre code) {
+  padding: 0;
+  background: none;
+}
+.answerProse :global(a) {
+  color: var(--accent, #8b6f3f);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+.answerProse :global(table) {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  font-size: 0.95em;
+}
+.answerProse :global(th),
+.answerProse :global(td) {
+  padding: 4px 10px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  text-align: left;
+}
+.answerProse :global(th) {
+  background: var(--bg-tint, rgba(0, 0, 0, 0.03));
+  font-weight: 600;
+}
+.answerProse :global(blockquote) {
+  margin: 0.6em 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--line, rgba(0, 0, 0, 0.15));
+  color: var(--ink-soft, #2e3a48);
+}
+
+/* Citation popover — inline hover/focus card */
+.citeWrap {
+  position: relative;
+  display: inline-block;
+  outline: none;
+}
+.citePopover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  width: max-content;
+  max-width: 280px;
+  padding: 10px 12px;
+  background: var(--bg-elev, #ffffff);
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 8px;
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.08));
+  font-family: var(--font-body);
+  text-align: left;
+  z-index: 12;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.citeWrap:hover .citePopover,
+.citeWrap:focus-within .citePopover {
+  display: flex;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+.citePopoverLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink, #1a1a1a);
+  line-height: 1.4;
+}
+.citePopoverMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ink-mute, #6b7785);
+}
+.citePopoverKind {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-tint, rgba(0, 0, 0, 0.04));
+  color: var(--ink-mute, #6b7785);
+}
+.citePopoverLink {
+  font-size: 12px;
+  color: var(--accent, #8b6f3f);
+  text-decoration: none;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.citePopoverLink:hover {
+  text-decoration: underline;
+}
+
+/* Answer footer — confidence + freshness + cite count + copy */
+.answerFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 6px;
+}
+.answerChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.confidenceChip,
+.citeCountChip {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: lowercase;
+}
+.confidenceChip {
+  font-weight: 600;
+}
+.confidenceHigh {
+  background: var(--pos-soft, #dde9df);
+  color: var(--pos, #2f6b47);
+}
+.confidenceMedium {
+  background: var(--warn-soft, #f2e5c9);
+  color: var(--warn, #b07d1f);
+}
+.confidenceLow {
+  background: var(--neg-soft, #efd9d2);
+  color: var(--neg, #a53f2d);
+}
+.citeCountChip {
+  background: var(--bg-tint, rgba(0, 0, 0, 0.04));
+  color: var(--ink-mute, #6b7785);
+}
+
+.copyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-mute, #6b7785);
+  background: transparent;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+.copyBtn:hover {
+  background: var(--bg-tint, rgba(0, 0, 0, 0.04));
+  color: var(--ink, #1a1a1a);
+  border-color: var(--line-soft, rgba(0, 0, 0, 0.15));
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Workspace pane — multi-tab right-side panel (Lakshya mockup pattern).
+ * Sits in .workspacePane (existing). Inner structure:
+ *   .workspacePaneInner
+ *     .wsTabs (Report | Tools | Sources … Export Save)
+ *     .wsContent (active tab body)
+ * ───────────────────────────────────────────────────────────────────── */
+
+.workspacePaneInner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-tint, #eeeee9);
+}
+
+/* Tabs row */
+.wsTabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 18px;
+  background: var(--bg, #f4f4f1);
+  border-bottom: 1px solid var(--line, #ddddd5);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.wsTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 12px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-mute, #6b7785);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color 150ms ease,
+    border-color 150ms ease;
+}
+.wsTab:hover {
+  color: var(--ink-soft, #2e3a48);
+}
+.wsTabActive {
+  color: var(--ink, #0f1419);
+  border-bottom-color: var(--accent, #8b6f3f);
+}
+.wsTabCount {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--bg-tint, #eeeee9);
+  color: var(--ink-mute, #6b7785);
+}
+.wsTabsSpacer {
+  flex: 1;
+}
+.wsAction,
+.wsActionPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+.wsAction {
+  color: var(--ink-soft, #2e3a48);
+  background: transparent;
+  border: 1px solid var(--line, #ddddd5);
+}
+.wsAction:hover:not(:disabled) {
+  background: var(--bg-tint, #eeeee9);
+}
+.wsActionPrimary {
+  color: var(--bg-elev, #fff);
+  background: var(--ink, #0f1419);
+  border: 1px solid var(--ink, #0f1419);
+}
+.wsActionPrimary:hover:not(:disabled) {
+  background: var(--ink-soft, #2e3a48);
+}
+.wsAction:disabled,
+.wsActionPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Content area — scrolls */
+.wsContent {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px;
+}
+
+/* ── Report card (used by Report tab) ────────────────────────────────── */
+.reportCard {
+  background: var(--bg-elev, #fff);
+  border: 1px solid var(--line, #ddddd5);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.reportCardHeader {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line, #ddddd5);
+}
+.reportEyebrow {
+  font-size: 10px;
+  color: var(--ink-mute, #6b7785);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 6px;
+}
+.reportCardTitle {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+  color: var(--ink, #0f1419);
+}
+.reportCardMeta {
+  font-size: 11px;
+  color: var(--ink-mute, #6b7785);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.reportCardBody {
+  padding: 22px;
+}
+
+.reportPending {
+  font-size: 13px;
+  color: var(--ink-mute, #6b7785);
+  font-style: italic;
+  padding: 24px 0;
+  text-align: center;
+}
+
+.reportSectionTitle {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink, #0f1419);
+  margin-bottom: 8px;
+}
+.reportProse {
+  font-size: 13px;
+  color: var(--ink-soft, #2e3a48);
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+/* KPI grid */
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+@media (max-width: 1100px) {
+  .kpiGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.kpiCard {
+  background: var(--bg-tint, #eeeee9);
+  border: 1px solid var(--line-soft, #e8e8e2);
+  padding: 12px;
+  border-radius: 8px;
+}
+.kpiLabel {
+  font-size: 10px;
+  color: var(--ink-mute, #6b7785);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+.kpiValue {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink, #0f1419);
+}
+.kpiUnit {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--ink-mute, #6b7785);
+  margin-left: 2px;
+}
+.kpiCite {
+  display: inline-block;
+  margin-top: 4px;
+  background: var(--bg-elev, #fff);
+  border: 1px solid var(--line-soft, #e8e8e2);
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-family: var(--font-mono);
+  color: var(--ink-mute, #6b7785);
+}
+
+/* ── Tools tab — vertical timeline ───────────────────────────────────── */
+.wsToolsTimeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.wsToolRow {
+  background: var(--bg-elev, #fff);
+  border: 1px solid var(--line, #ddddd5);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.wsToolRowError {
+  border-left: 3px solid var(--neg, #a53f2d);
+}
+.wsToolRowHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.wsToolStatus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.wsToolStatusOk {
+  background: var(--pos-soft, #dde9df);
+  color: var(--pos, #2f6b47);
+}
+.wsToolStatusErr {
+  background: var(--neg-soft, #efd9d2);
+  color: var(--neg, #a53f2d);
+}
+.wsToolStatusRunning {
+  background: var(--warn-soft, #f2e5c9);
+  color: var(--warn, #b07d1f);
+}
+.wsToolName {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink, #0f1419);
+  flex: 1;
+  min-width: 0;
+}
+.wsToolLatency {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-mute, #6b7785);
+  flex-shrink: 0;
+}
+.wsToolBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wsToolField {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.wsToolFieldLabel {
+  font-size: 10px;
+  color: var(--ink-mute, #6b7785);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.wsToolFieldCode {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--bg-tint, #eeeee9);
+  color: var(--ink, #0f1419);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.wsToolFieldCodeError {
+  background: rgba(165, 63, 45, 0.08);
+  color: var(--neg, #a53f2d);
+}
+
+/* ── Sources tab ─────────────────────────────────────────────────────── */
+.sourceListPane {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sourceListTitleSecondary {
+  margin-top: 18px;
+}
+.sourceItemBody {
+  min-width: 0;
+  flex: 1;
+}
+.sourceNumMuted {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--bg-tint, #eeeee9);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-mute, #6b7785);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ── Generic empty state inside a workspace tab ──────────────────────── */
+.wsEmptyState {
+  padding: 32px 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-mute, #6b7785);
+  line-height: 1.6;
+}
+
+/* ── Charts tab — one card per ChartEvent ───────────────────────────── */
+.chartsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.chartCard {
+  background: var(--bg-elev, #fff);
+  border: 1px solid var(--line, #ddddd5);
+  border-radius: 10px;
+  padding: 16px 18px 12px;
+}
+.chartCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+.chartCardEyebrow {
+  font-size: 11px;
+  color: var(--ink-mute, #6b7785);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex: 1;
+  min-width: 0;
+}
+.chartCardCurrent {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.chartCardValue {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--ink, #0f1419);
+  line-height: 1;
+}
+.chartCardUnit {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--ink-mute, #6b7785);
+  margin-left: 2px;
+  font-weight: 400;
+}
+.chartCardDelta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-mute, #6b7785);
+}
+.chartCardDeltaPos {
+  color: var(--pos, #2f6b47);
+}
+.chartCardDeltaNeg {
+  color: var(--neg, #a53f2d);
+}
+.chartSvg {
+  width: 100%;
+  height: 110px;
+  display: block;
+}
+
+/* ── Source list — card-style citations (Lakshya mockup) ─────────────── */
+
+.sourceListPane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sourceListEyebrow {
+  font-size: 10px;
+  color: var(--ink-mute, #6b7785);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+.sourceListEyebrowSecondary {
+  margin-top: 14px;
+}
+
+.sourceCard {
+  background: var(--bg-elev, #fff);
+  border: 1px solid var(--line, #ddddd5);
+  border-radius: 10px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+  cursor: default;
+}
+.sourceCard:hover {
+  border-color: var(--ink-faint, #a8afb9);
+  box-shadow: var(--shadow-sm);
+}
+
+/* "cite N" badge — Lakshya mockup style: top-left, mono, accent tint */
+.sourceCite {
+  align-self: flex-start;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--accent, #8b6f3f);
+  background: var(--accent-soft, #f0e9da);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.sourceCiteMuted {
+  color: var(--ink-mute, #6b7785);
+  background: var(--bg-tint, #eeeee9);
+}
+
+/* Title in display serif, like a published research note */
+.sourceCardTitle {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--ink, #0f1419);
+  margin-top: 2px;
+}
+
+.sourceCardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-mute, #6b7785);
+}
+.sourceDot {
+  color: var(--ink-faint, #a8afb9);
+}
+.sourceKindTag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute, #6b7785);
+}
+.sourceCardData {
+  border-style: dashed;
+}
+
+/* ── Tool-call status badge (rounded square holding the status SVG) ───── */
+
+.toolCallBadge {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--bg-elev, #fff);
+  border: 1px solid var(--line, #ddddd5);
+  color: var(--accent, #8b6f3f);
+  flex-shrink: 0;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.toolCallBadge svg {
+  width: 12px;
+  height: 12px;
+}
+.toolCallBadgeDone {
+  background: var(--pos-soft, #dde9df);
+  color: var(--pos, #2f6b47);
+  border-color: transparent;
+}
+.toolCallBadgeRunning {
+  background: var(--warn-soft, #f2e5c9);
+  color: var(--warn, #b07d1f);
+  border-color: transparent;
+}
+.toolCallBadgeRunning svg {
+  animation: spin 1s linear infinite;
+}
+.toolCallBadgeError {
+  background: var(--neg-soft, #efd9d2);
+  color: var(--neg, #a53f2d);
+  border-color: transparent;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
