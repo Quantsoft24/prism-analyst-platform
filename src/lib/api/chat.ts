@@ -12,6 +12,11 @@
  */
 
 import { config } from "@/lib/config";
+import { isMockModeEnabled, runMockChatStream, setMockMode } from "./chat.mock";
+
+/** Re-exports — UI components import these from the same module they import
+ *  ``runChatStream`` from. Keeps the mock-mode plumbing colocated. */
+export { isMockModeEnabled, setMockMode };
 
 // ── Wire types — must match src/schemas/chat.py on the backend ────────────
 
@@ -29,6 +34,17 @@ export interface ToolCallEvent {
   call_id: string;
 }
 
+/**
+ * One of the structured next-action verbs the backend tools return on failure
+ * (see ``prism-analyst-services/src/integrations/tools/_errors.py``). The UI
+ * uses it to render the right next-step hint chip / icon on the tool card.
+ */
+export type ToolNextAction =
+  | "ask_user_to_retry_later"
+  | "try_alternate_tool"
+  | "ask_user_to_clarify"
+  | "give_up_gracefully";
+
 export interface ToolResultEvent {
   type: "tool_result";
   call_id: string;
@@ -36,6 +52,10 @@ export interface ToolResultEvent {
   ok: boolean;
   result_summary: string | null;
   error: string | null;
+  /** snake_case machine token, e.g. "stock_chat_unreachable" — back-compat: may be missing on legacy tool responses. */
+  error_code: string | null;
+  /** What the agent (or user) should do about this failure. May be missing. */
+  next_action: ToolNextAction | null;
   latency_ms: number;
 }
 
@@ -44,9 +64,130 @@ export interface TokenEvent {
   text: string;
 }
 
+/**
+ * The agent surfaced an inspectable piece of reasoning. The UI renders it
+ * as a collapsible "Thinking…" card above tool calls + the eventual answer.
+ */
+export interface AgentThoughtEvent {
+  type: "agent_thought";
+  text: string;
+  kind: "plan" | "reflect" | "decision";
+}
+
+/**
+ * The runner re-invoked a tool after a transient failure. Emitted between
+ * the failing ``tool_result`` and the next ``tool_call`` for the same
+ * ``call_id``. Today the backend's HTTP-layer retries are silent (no event);
+ * this schema is here for the future when retries become user-visible.
+ */
+export interface ToolRetryEvent {
+  type: "tool_retry";
+  call_id: string;
+  tool: string;
+  attempt: number; // 1-indexed: 2 means "second try"
+  reason: string;
+}
+
+/**
+ * Freshness signal for a tool result. The UI shows an "as of …" chip on
+ * the matching tool card AND the eventual answer block.
+ */
+export interface DataFreshnessEvent {
+  type: "data_freshness";
+  call_id: string;
+  source: string; // e.g. "filings catalog"
+  as_of: string | null; // ISO date / "live" / null
+}
+
+/** One data point on a chart — labelled x (period / category) and numeric y. */
+export interface ChartPoint {
+  x: string;
+  y: number;
+}
+
+/**
+ * A chart that a tool surfaced — e.g. `stock_technicals` returning a 5-quarter
+ * ARPU trend, or `compute_growth` over a series. The UI's Workspace → Charts
+ * tab renders one card per ChartEvent. Backend doesn't emit these today; the
+ * wire shape is here so when a chart-producing tool ships, the pipeline is
+ * already wired end-to-end (mock mode validates the path).
+ */
+export interface ChartEvent {
+  type: "chart";
+  /** Call that produced the chart; null when synthesised from the final answer. */
+  call_id: string | null;
+  /** Stable id so the UI can dedup if a chart is emitted twice. */
+  chart_id: string;
+  /** e.g. "Jio segment ARPU · trailing 5 quarters" */
+  title: string;
+  /** Display unit prefix/suffix — "₹" / "%" / "x" / "". */
+  unit: string;
+  /** Latest value, formatted ("202", "12.4", "47,628"). */
+  current_value: string;
+  /** Optional delta line ("+3.1% q/q", "−0.42% YTD") + its sign. */
+  current_delta: string | null;
+  delta_kind: "pos" | "neg" | "neutral" | null;
+  /** Series of {x_label, y_value}. UI infers chart range from the points. */
+  points: ChartPoint[];
+  /** Visualisation hint — frontend may fall back to a default. */
+  kind: "line" | "area" | "bar";
+}
+
+/** A single citation backing a fact in the final answer. */
+export interface Citation {
+  label: string;
+  url: string | null;
+  source_kind: "filing" | "web" | "bmc" | "tool";
+  as_of: string | null;
+  tool_call_id: string | null;
+}
+
+/** A headline KPI surfaced in the workspace Report tab.
+ *
+ * Renders as one card in the KPI grid (mockup pattern: Revenue · ₹2.74L cr ·
+ * cite 1 · pg 4). Backend tools don't emit these today; the schema lives
+ * here so when a tool ships that extracts headline numbers from a filing
+ * (or the agent fills it from a structured answer block), the Report tab
+ * renders without further frontend changes. Mock mode validates the pipe. */
+export interface FinalKpi {
+  label: string;
+  value: string;
+  unit: string | null;
+  cite_label: string | null;
+}
+
+/** A named section in the final research note (Executive summary, Anomaly
+ * flags, etc.). Body is markdown so we can keep citations / bold / lists
+ * intact. ``kind`` lets the UI accent anomaly callouts in warn-yellow. */
+export interface FinalSection {
+  title: string;
+  body: string;
+  kind: "summary" | "anomaly" | "note";
+}
+
+/**
+ * Structured final-answer payload. Present on ``FinalEvent.structured`` when
+ * the agent emitted the ``<answer_meta>{...}</answer_meta>`` block at the
+ * end of its response. The UI prefers this rendering path over raw prose.
+ */
+export interface FinalAnswer {
+  text: string;
+  citations: Citation[];
+  confidence: "high" | "medium" | "low";
+  data_freshness: string | null;
+  /** Headline KPIs the agent extracted — render as the Report tab's KPI
+   *  grid. Optional; empty/missing arrays render no grid. */
+  kpis: FinalKpi[];
+  /** Named sections (Executive summary, Anomaly flags, etc.) that come
+   *  AFTER the KPI grid and BEFORE the prose. Optional. */
+  sections: FinalSection[];
+}
+
 export interface FinalEvent {
   type: "final";
   answer: string;
+  /** Present when the agent emitted the structured tail block. May be null. */
+  structured: FinalAnswer | null;
   agent_run_id: string;
   cost_usd: number;
   input_tokens: number;
@@ -67,6 +208,10 @@ export type ChatEvent =
   | ToolCallEvent
   | ToolResultEvent
   | TokenEvent
+  | AgentThoughtEvent
+  | ToolRetryEvent
+  | DataFreshnessEvent
+  | ChartEvent
   | FinalEvent
   | ErrorEvent;
 
@@ -81,6 +226,10 @@ export interface ChatStreamHandlers {
   onToolCall?: (event: ToolCallEvent) => void;
   onToolResult?: (event: ToolResultEvent) => void;
   onToken?: (event: TokenEvent) => void;
+  onAgentThought?: (event: AgentThoughtEvent) => void;
+  onToolRetry?: (event: ToolRetryEvent) => void;
+  onDataFreshness?: (event: DataFreshnessEvent) => void;
+  onChart?: (event: ChartEvent) => void;
   onFinal?: (event: FinalEvent) => void;
   onError?: (event: ErrorEvent) => void;
   /** Catch-all — useful for logging or future event types. */
@@ -104,6 +253,14 @@ export function runChatStream(
   request: ChatRunRequest,
   handlers: ChatStreamHandlers = {},
 ): ChatStreamHandle {
+  // Mock-mode escape hatch (testing UI without burning tokens or needing the
+  // backend stack up). Set `localStorage.prism.mockMode = "1"` to enable;
+  // remove the flag (or click the chat header's MOCK badge) to disable.
+  // Remove this branch + chat.mock.ts before shipping to production.
+  if (isMockModeEnabled()) {
+    return runMockChatStream(request, handlers);
+  }
+
   const controller = new AbortController();
   const url = new URL("/api/v1/chat/run", config.apiUrl).toString();
 
@@ -148,6 +305,18 @@ export function runChatStream(
           break;
         case "token":
           handlers.onToken?.(event);
+          break;
+        case "agent_thought":
+          handlers.onAgentThought?.(event);
+          break;
+        case "tool_retry":
+          handlers.onToolRetry?.(event);
+          break;
+        case "data_freshness":
+          handlers.onDataFreshness?.(event);
+          break;
+        case "chart":
+          handlers.onChart?.(event);
           break;
         case "final":
           handlers.onFinal?.(event);

@@ -49,3 +49,10 @@ docker-compose.override.yml
 # ── Vercel ──
 .vercel
 
+# ── graphify (generated knowledge-graph artifacts; rebuild with `graphify update .`) ──
+graphify-out/
+
+# ── Per-machine Claude Code config (each teammate installs locally) ──
+CLAUDE.md
+.claude/
+

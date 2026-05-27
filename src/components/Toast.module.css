@@ -35,7 +35,7 @@
 /* ── Type variants ── */
 .success {
   background: var(--pos);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .info {
@@ -45,12 +45,12 @@
 
 .warning {
   background: var(--warn);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .error {
   background: var(--neg);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 /* ── Animations ── */

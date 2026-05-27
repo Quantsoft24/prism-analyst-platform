@@ -157,8 +157,10 @@
   cursor: pointer;
   transition: all var(--transition-normal);
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
 }
 
 .suggestionCard:hover {
@@ -166,18 +168,48 @@
   box-shadow: var(--shadow-sm);
   transform: translateY(-2px);
 }
+.suggestionCard:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Icon block on the left — matches mockup's .ask-sug-icon (bg-tint
+ * square with accent-coloured glyph). */
+.suggestionIcon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  background: var(--bg-tint);
+  border-radius: var(--radius-md);
+  color: var(--accent);
+}
+.suggestionIcon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.suggestionContent {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
 
 .suggestionLabel {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--ink-mute);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .suggestionText {
   font-size: 13px;
   color: var(--ink);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .modeTabs {

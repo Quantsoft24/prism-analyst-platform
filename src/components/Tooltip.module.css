@@ -1,0 +1,79 @@
+/* ──────────────────────────────────────────────────────────────────────────
+ * Tooltip — portal-rendered, escapes overflow clipping.
+ * Used for the collapsed sidebar (and any future place we need a custom
+ * label on hover/focus). Matches Claude / Notion / GPT tooltip styling:
+ *   • short delay before appearing (~300ms by default)
+ *   • appears with a subtle fade + slight translate
+ *   • dark chip with white text in light mode; flipped in dark
+ *   • carets / arrows omitted (Claude doesn't use them either — keeps
+ *     the visual quiet)
+ * ─────────────────────────────────────────────────────────────────────── */
+
+.trigger {
+  /* The wrapper carries pointer events for the trigger while letting the
+     child render its own visuals normally. inline-flex keeps the child's
+     box intact (display:contents would erase the wrapper's bbox, which
+     we need for positioning math). */
+  display: inline-flex;
+  align-items: stretch;
+}
+
+/* The tooltip itself lives in document.body via createPortal — z-index
+ * compares against the whole page, not just the sidebar. */
+.tooltip {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  padding: 5px 10px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  background: var(--ink);
+  color: var(--bg-elev);
+  border-radius: 6px;
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  animation: tipIn 120ms ease-out forwards;
+  max-width: 240px;
+}
+
+@keyframes tipIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+}
+
+/* When positioned at top/bottom we don't translateY -50% — handled by the
+ * `data-side` attribute the component sets. */
+.tooltip[data-side="top"],
+.tooltip[data-side="bottom"] {
+  animation-name: tipInVertical;
+}
+@keyframes tipInVertical {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Keyboard-shortcut hint (optional sibling text — e.g. "⌘B") rendered
+ * dim next to the label. Same idea Claude uses in its tooltips. */
+.kbd {
+  display: inline-block;
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  opacity: 0.65;
+}
