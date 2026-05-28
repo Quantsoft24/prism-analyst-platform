@@ -383,14 +383,30 @@ export function useChat(): UseChatReturn {
               latency_ms: event.latency_ms,
             }));
             setMessages((prev) =>
-              updateLastAssistant(prev, (msg) => ({
-                ...msg,
-                isThinking: false,
-                showAnswer: true,
-                text: event.answer,
-                streamedText: event.answer,
-                structured: event.structured ?? null,
-              })),
+              updateLastAssistant(prev, (msg) => {
+                // Client-side fallback FinalAnswer (T3.1): if the backend
+                // didn't provide a structured payload (Gemini Flash sometimes
+                // omits the <answer_meta> tail), synthesize a minimal one
+                // from the tool_call evidence the user already saw. The
+                // Report tab + sources chips still render — empty would be
+                // a visibly degraded experience. We never invent KPIs or
+                // section bodies; only citations + confidence + freshness,
+                // which are observed facts.
+                const structured =
+                  event.structured ??
+                  synthesizeFallbackAnswer(
+                    event.answer,
+                    msg.toolCalls ?? [],
+                  );
+                return {
+                  ...msg,
+                  isThinking: false,
+                  showAnswer: true,
+                  text: event.answer,
+                  streamedText: event.answer,
+                  structured,
+                };
+              }),
             );
           },
 
@@ -531,4 +547,81 @@ function deriveTitle(query: string): string {
   const trimmed = query.trim();
   if (trimmed.length <= 60) return trimmed;
   return trimmed.slice(0, 57) + "…";
+}
+
+/**
+ * Synthesize a minimal FinalAnswer when the backend didn't emit one.
+ *
+ * Production-grade rules:
+ *  - Only use OBSERVED facts (tool calls + their freshness, success/failure).
+ *    Never invent KPIs, never fabricate section bodies, never quote numbers
+ *    that didn't appear in a tool result.
+ *  - Returns `null` when there's nothing useful to synthesize (no answer
+ *    text AND no tool calls). The Report tab falls back to prose-only,
+ *    same as before.
+ *  - Idempotent + cheap (no async, no setState).
+ */
+function synthesizeFallbackAnswer(
+  answer: string,
+  toolCalls: ToolCallState[],
+): FinalAnswer | null {
+  if (!answer && toolCalls.length === 0) return null;
+
+  const succeeded = toolCalls.filter((t) => t.status === "done");
+  const failed = toolCalls.filter((t) => t.status === "error");
+
+  // Citations: one per successful tool. The label is just the tool name
+  // (humanised) plus its freshness; users hover the Sources chip to see it.
+  const citations: Citation[] = succeeded.map((t) => {
+    const asOf = t.freshness?.as_of ?? null;
+    const suffix = asOf ? ` · as of ${asOf}` : "";
+    return {
+      label: `${prettifyToolName(t.tool)}${suffix}`,
+      url: null,
+      source_kind: toolSourceKind(t.tool),
+      as_of: asOf,
+      tool_call_id: t.call_id,
+    };
+  });
+
+  // Confidence heuristic:
+  //  • all tools succeeded   → "high"
+  //  • some failed           → "medium"
+  //  • nothing succeeded     → "low"
+  let confidence: FinalAnswer["confidence"];
+  if (succeeded.length === 0) confidence = "low";
+  else if (failed.length === 0) confidence = "high";
+  else confidence = "medium";
+
+  // data_freshness: prefer the LATEST as_of across tools. Strings sort
+  // correctly for ISO dates; "live" comes after ISO dates lexically which
+  // matches its semantic ("now ≥ any past date"). null/undefined skipped.
+  const freshness = succeeded
+    .map((t) => t.freshness?.as_of)
+    .filter((x): x is string => Boolean(x))
+    .sort()
+    .pop();
+
+  return {
+    text: answer,
+    citations,
+    confidence,
+    data_freshness: freshness ?? null,
+    // Deliberately empty — we don't fabricate KPIs or sections client-side.
+    // Real values come from the backend's <answer_meta> block when the LLM
+    // cooperates; if it doesn't, the Report tab still has chips + Sources.
+    kpis: [],
+    sections: [],
+  };
+}
+
+function prettifyToolName(tool: string): string {
+  return tool.replace(/_/g, " ");
+}
+
+function toolSourceKind(tool: string): Citation["source_kind"] {
+  if (tool.startsWith("stock_filings")) return "filing";
+  if (tool === "web_search") return "web";
+  if (tool.startsWith("bmc_")) return "bmc";
+  return "tool";
 }
