@@ -3,6 +3,11 @@
 > **AI-powered equity research analyst for Indian markets.**
 > Ask anything about companies, filings, sectors, or funds — with every figure cited and cross-checked.
 
+> **Coding agent? Start here:** [`AGENTS.md`](AGENTS.md) and
+> [`../PRISM_HANDOFF.md`](../PRISM_HANDOFF.md). The workspace supports
+> multi-agent collaboration (Claude Code, Antigravity, Cursor, Aider) — those
+> files are the shared single source of truth across agent sessions.
+
 ## Architecture
 
 ```
@@ -114,24 +119,25 @@ Open <http://localhost:4000>.
 
 | View       | What it does |
 |------------|--------------|
-| **Chat**       | Ask screen → live agent stream via SSE. Tool-call timeline shows each `stock_filings_*` / `bmc_*` / `compute_*` call. `@bmc <name>` routes to the BMC view. |
+| **Chat**       | Ask screen → live agent stream via SSE. Tool-call timeline shows each `stock_filings_*` / `bmc_*` / `financials_query` call. Markdown rendering, inline citation popovers, copy-to-clipboard, and a stop+retry control. `@bmc <name>` routes to the BMC view. |
 | **BMC**        | 9-block Business Model Canvas in a 2D grid (primary) + a 3D explorer toggle (energy-core force graph). Click any `[n]` citation marker → side panel with the cited filing excerpt + drill-down chat. PDF / JSON export. Proxied to the external `bmc` service. |
 | **Companies** | Paginated list of the 4,773-row Indian markets catalog (search by name/code, filter by industry). Backed by the catalog Postgres read-only. |
 | **Dashboard**  | Hero greeting, watchlist sparklines, activity feed (currently mock — wires to real telemetry in a later slice). |
 | **Reports**    | Reports Library with category filters (mock scaffold for now). |
-| **Settings**   | 10 sections incl. **Tools & Capabilities** — lists registered integrations from `GET /api/v1/integrations` (`stock-chat · 3 tools`, `bmc · 6 tools`) with per-firm enable/disable toggles. |
+| **Settings**   | 10 sections incl. **Tools & Capabilities** — lists registered integrations from `GET /api/v1/integrations` (`stock-chat · 3 tools`, `bmc · 6 tools`, `prism-financials · 1 tool`) with per-firm enable/disable toggles. |
 
 ## Keyboard Shortcuts
 
-| Shortcut | Action          |
-|----------|-----------------|
-| ⌘K       | Open search     |
-| ⌘N       | New research    |
-| ⌘1       | Dashboard       |
-| ⌘2       | Research Chat   |
-| ⌘3       | Reports Library |
-| ⌘4       | Settings        |
-| Esc      | Close modal     |
+| Shortcut | Action                       |
+|----------|------------------------------|
+| ⌘K       | Open search                  |
+| ⌘N       | New research                 |
+| ⌘B       | Toggle collapsed sidebar     |
+| ⌘1       | Dashboard                    |
+| ⌘2       | Research Chat                |
+| ⌘3       | Reports Library              |
+| ⌘4       | Settings                     |
+| Esc      | Close modal                  |
 
 ## Environment Variables
 
