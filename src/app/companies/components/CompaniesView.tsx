@@ -1,235 +1,208 @@
 "use client";
 
-import { Building2, Search } from "lucide-react";
 import * as React from "react";
 
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api/client";
 import { useCompanies, type ListCompaniesParams } from "@/lib/api/companies";
+import type { CompanyRead } from "@/lib/api/types";
 
-const PAGE_SIZE = 25;
+import styles from "./CompaniesView.module.css";
+
+const PAGE_SIZE = 30;
 
 interface CompaniesViewProps {
-  /** Triggered when the user picks a company — host page can route to detail / chat. */
+  /** Triggered when the user picks a company — host routes to chat research. */
   onSelect?: (ticker: string) => void;
 }
 
 /**
- * Companies coverage browser.
+ * Companies coverage browser — PRISM's ~4,773-company India universe.
  *
- * Real backend integration (no mocks) — first user-facing surface to hit
- * /api/v1/companies. Renders a search box + cards of the firm's coverage
- * universe. Loading uses Skeletons, errors render an inline retry message,
- * empty state explains *why* the list might be empty (filters too tight vs
- * truly no data).
+ * Search by ticker / name / alias (server-side fuzzy), filter by sector, and
+ * "Load more" to page through the whole universe (the previous version showed
+ * only the first 25 with no way to reach the rest). Sector options accumulate
+ * from real data so they always match what the API filters on. CSS Modules +
+ * Lakshya tokens, matching the codebase convention.
  */
 export default function CompaniesView({ onSelect }: CompaniesViewProps) {
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [sector, setSector] = React.useState<string | undefined>(undefined);
+  const [limit, setLimit] = React.useState(PAGE_SIZE);
+  const [sectorOptions, setSectorOptions] = React.useState<string[]>([]);
 
-  // Debounce search input so we don't fire on every keystroke.
+  // Debounce search; reset paging whenever the query or sector changes.
   React.useEffect(() => {
-    const handle = setTimeout(() => setDebouncedSearch(search), 250);
-    return () => clearTimeout(handle);
+    const h = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(h);
   }, [search]);
+  React.useEffect(() => {
+    setLimit(PAGE_SIZE);
+  }, [debouncedSearch, sector]);
 
   const params: ListCompaniesParams = {
     search: debouncedSearch || undefined,
     sector,
-    limit: PAGE_SIZE,
+    limit,
     offset: 0,
   };
-  const { data, isLoading, isError, error, refetch, isFetching } =
-    useCompanies(params);
+  const { data, isLoading, isError, error, refetch, isFetching } = useCompanies(params);
+
+  const items = data?.items ?? [];
+  const total = data?.page.total ?? 0;
+  const hasMore = items.length < total;
+
+  // Accumulate sector options from UNFILTERED results so the dropdown stays
+  // complete even after a sector is selected (which would otherwise shrink the
+  // visible set). Grows as the user loads more pages.
+  React.useEffect(() => {
+    if (sector || !data) return;
+    setSectorOptions((prev) => {
+      const seen = new Set(prev);
+      for (const c of data.items) {
+        const s = c.industry || c.sector;
+        if (s) seen.add(s);
+      }
+      const next = [...seen].sort((a, b) => a.localeCompare(b));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [data, sector]);
 
   return (
-    <div className="flex h-full w-full flex-col gap-6 overflow-y-auto p-8">
+    <div className={styles.page}>
       {/* Header */}
-      <header className="flex flex-col gap-2">
-        <h1 className="font-display text-3xl tracking-tight text-ink">
-          Coverage universe
-        </h1>
-        <p className="text-sm text-ink-mute">
-          Companies in PRISM&apos;s India coverage. Search by ticker, name, or alias
-          (e.g. &quot;Tata&quot; finds TCS). NSE-listed only for now — BSE small/mid-caps
-          land in Slice 4.
+      <header className={styles.header}>
+        <h1 className={styles.title}>Coverage universe</h1>
+        <p className={styles.subtitle}>
+          PRISM&apos;s India coverage. Search by ticker, name, or alias (e.g.
+          &quot;Tata&quot; finds TCS), or filter by sector. Click any company to
+          start research. NSE-listed for now.
         </p>
       </header>
 
-      {/* Search + filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[280px]">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
-          <Input
+      {/* Toolbar */}
+      <div className={styles.toolbar}>
+        <div className={styles.searchWrap}>
+          <svg className={styles.searchIcon} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            className={styles.searchInput}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search ticker, name, or alias…"
-            className="pl-9"
             aria-label="Search companies"
           />
         </div>
-        <SectorFilter value={sector} onChange={setSector} />
+        <select
+          className={styles.sectorSelect}
+          value={sector ?? ""}
+          onChange={(e) => setSector(e.target.value || undefined)}
+          aria-label="Filter by sector"
+        >
+          <option value="">All sectors</option>
+          {/* Keep a selected sector visible even if not yet in the accumulated list */}
+          {sector && !sectorOptions.includes(sector) && <option value={sector}>{sector}</option>}
+          {sectorOptions.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
         {data && (
-          <span className="ml-auto text-xs text-ink-mute">
-            {data.page.total.toLocaleString()} companies
-            {isFetching && " · refreshing…"}
+          <span className={styles.count}>
+            {total.toLocaleString()} {sector || debouncedSearch ? "matches" : "companies"}
+            {isFetching && !isLoading ? " · refreshing…" : ""}
           </span>
         )}
       </div>
 
       {/* States */}
-      {isLoading && <LoadingState />}
-      {isError && <ErrorState error={error} onRetry={() => refetch()} />}
-      {data && data.items.length === 0 && !isLoading && (
-        <EmptyState hasFilters={!!debouncedSearch || !!sector} />
-      )}
-
-      {/* Results */}
-      {data && data.items.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {data.items.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => onSelect?.(c.ticker)}
-              className="text-left transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-lg"
-            >
-              <Card>
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <CardTitle className="truncate">{c.name}</CardTitle>
-                      <CardDescription className="font-mono text-xs">
-                        {c.exchange}: {c.ticker}
-                      </CardDescription>
-                    </div>
-                    <Building2 className="h-4 w-4 shrink-0 text-ink-faint" />
-                  </div>
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-1.5">
-                  {c.sector && <Badge variant="secondary">{c.sector}</Badge>}
-                  {c.industry && (
-                    <Badge variant="outline" className="font-normal">
-                      {c.industry}
-                    </Badge>
-                  )}
-                  {c.isin && (
-                    <Badge variant="outline" className="font-mono text-[10px]">
-                      {c.isin}
-                    </Badge>
-                  )}
-                </CardContent>
-              </Card>
-            </button>
+      {isLoading && (
+        <div className={styles.grid}>
+          {Array.from({ length: 9 }).map((_, i) => (
+            <div key={i} className={styles.skeletonCard} />
           ))}
         </div>
       )}
+
+      {isError && (
+        <div className={styles.errorBox}>
+          <div className={styles.stateTitle}>Couldn&apos;t load companies</div>
+          <div className={styles.stateText}>{errorMessage(error)}</div>
+          <button className={styles.retryBtn} onClick={() => refetch()}>Retry</button>
+        </div>
+      )}
+
+      {data && items.length === 0 && !isLoading && (
+        <div className={styles.empty}>
+          <div className={styles.stateTitle}>No companies match</div>
+          <div className={styles.stateText}>
+            {debouncedSearch || sector
+              ? "Try a different search term or clear the sector filter."
+              : "The coverage catalog appears empty — check the backend connection."}
+          </div>
+        </div>
+      )}
+
+      {/* Results */}
+      {items.length > 0 && (
+        <>
+          <div className={styles.grid}>
+            {items.map((c) => (
+              <CompanyCard key={c.id} company={c} onSelect={onSelect} />
+            ))}
+          </div>
+
+          <div className={styles.loadMoreRow}>
+            {hasMore ? (
+              <button
+                className={styles.loadMore}
+                onClick={() => setLimit((l) => l + PAGE_SIZE)}
+                disabled={isFetching}
+              >
+                {isFetching ? "Loading…" : `Load more (${items.length.toLocaleString()} of ${total.toLocaleString()})`}
+              </button>
+            ) : (
+              <span className={styles.endNote}>
+                Showing all {total.toLocaleString()} {sector || debouncedSearch ? "matches" : "companies"}
+              </span>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────
-
-const SECTORS = [
-  "Energy",
-  "Information Technology",
-  "Financials",
-  "Communication Services",
-  "Consumer Staples",
-  "Industrials",
-  "Materials",
-] as const;
-
-function SectorFilter({
-  value,
-  onChange,
-}: {
-  value: string | undefined;
-  onChange: (v: string | undefined) => void;
-}) {
+function CompanyCard({ company: c, onSelect }: { company: CompanyRead; onSelect?: (t: string) => void }) {
+  // Dedupe: sector and industry are identical for most rows — show ONE tag,
+  // preferring the more specific `industry`.
+  const tag = c.industry || c.sector;
   return (
-    <select
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value || undefined)}
-      aria-label="Filter by sector"
-      className="h-9 rounded-md border border-line bg-bg-elev px-3 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-    >
-      <option value="">All sectors</option>
-      {SECTORS.map((s) => (
-        <option key={s} value={s}>
-          {s}
-        </option>
-      ))}
-    </select>
+    <button type="button" className={styles.card} onClick={() => onSelect?.(c.ticker)}>
+      <div className={styles.cardTop}>
+        <div>
+          <div className={styles.cardName}>{c.name}</div>
+          <div className={styles.ticker}>
+            <span className={styles.tickerExch}>{c.exchange}:</span> {c.ticker}
+          </div>
+        </div>
+        <span className={styles.researchHint}>
+          Research
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+          </svg>
+        </span>
+      </div>
+      <div className={styles.cardMeta}>
+        {tag && <span className={styles.sectorTag}>{tag}</span>}
+        {c.isin && <span className={styles.isin}>{c.isin}</span>}
+      </div>
+    </button>
   );
 }
 
-function LoadingState() {
-  return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <Card key={i}>
-          <CardHeader>
-            <Skeleton className="h-5 w-2/3" />
-            <Skeleton className="mt-1.5 h-3 w-1/3" />
-          </CardHeader>
-          <CardContent className="flex gap-1.5">
-            <Skeleton className="h-5 w-20" />
-            <Skeleton className="h-5 w-24" />
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const message =
-    error instanceof ApiError
-      ? `${error.status}: ${error.message}`
-      : error instanceof Error
-        ? error.message
-        : "Unknown error";
-  return (
-    <Card className="border-neg/40 bg-neg-soft/40">
-      <CardHeader>
-        <CardTitle className="text-neg">Couldn&apos;t load companies</CardTitle>
-        <CardDescription>{message}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <button
-          type="button"
-          onClick={onRetry}
-          className="text-sm font-medium text-accent hover:text-accent-deep underline-offset-4 hover:underline"
-        >
-          Retry
-        </button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function EmptyState({ hasFilters }: { hasFilters: boolean }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>No companies match</CardTitle>
-        <CardDescription>
-          {hasFilters
-            ? "Try a broader search or clear the sector filter."
-            : "The coverage universe is empty — run the seed migration on the backend."}
-        </CardDescription>
-      </CardHeader>
-    </Card>
-  );
+function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) return `${error.status}: ${error.message}`;
+  if (error instanceof Error) return error.message;
+  return "Unknown error — the backend may be unreachable.";
 }

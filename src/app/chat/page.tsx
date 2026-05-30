@@ -10,6 +10,7 @@ import AskScreen from "./components/AskScreen";
 import ChatLayout from "./components/ChatLayout";
 import CompaniesView from "../companies/components/CompaniesView";
 import BMCView from "../bmc/components/BMCView";
+import NewsView from "../news/components/NewsView";
 import DashboardView from "../dashboard/components/DashboardView";
 import ReportsView from "../reports/components/ReportsView";
 import SettingsView from "../settings/components/SettingsView";
@@ -121,6 +122,9 @@ export default function ChatPage() {
       case "bmc":
         return <BMCView initialTicker={bmcTicker} />;
 
+      case "news":
+        return <NewsView onAsk={handleQuickPrompt} />;
+
       case "reports":
         return <ReportsView onReportClick={handleReportClick} />;
 
@@ -136,6 +140,7 @@ export default function ChatPage() {
           <ChatLayout
             messages={chat.messages}
             intentConfig={chat.intentConfig}
+            activeIntent={chat.activeIntent}
             showWorkspace={chat.showWorkspace}
             phase={chat.phase}
             runMeta={chat.runMeta}

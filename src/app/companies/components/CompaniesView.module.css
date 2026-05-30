@@ -1,0 +1,141 @@
+/* Companies coverage browser — CSS Modules + Lakshya design tokens.
+ * Matches the codebase convention (no inline styles, no utility classes).
+ * Mobile-first; the card grid steps 1 → 2 → 3 columns by breakpoint. */
+
+.page {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px 16px;
+}
+@media (min-width: 640px) { .page { padding: 24px; } }
+@media (min-width: 1024px) { .page { padding: 32px; } }
+
+/* ── Header ── */
+.header { display: flex; flex-direction: column; gap: 6px; }
+.title {
+  font-family: var(--font-display);
+  font-size: 28px; line-height: 1.05; letter-spacing: -0.02em; color: var(--ink);
+}
+@media (min-width: 640px) { .title { font-size: 32px; } }
+.subtitle { font-size: 14px; line-height: 1.5; color: var(--ink-mute); max-width: 70ch; }
+
+/* ── Toolbar (search + sector + count) ── */
+.toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  position: sticky; top: 0; z-index: 5;
+  padding: 4px 0;
+}
+.searchWrap { position: relative; flex: 1; min-width: 240px; }
+.searchIcon {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-faint); pointer-events: none;
+}
+.searchInput {
+  width: 100%; height: 40px; padding: 0 12px 0 36px;
+  border: 1px solid var(--line); border-radius: var(--radius-md);
+  background: var(--bg-elev); color: var(--ink); font-size: 14px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast);
+}
+.searchInput::placeholder { color: var(--ink-faint); }
+.searchInput:focus-visible { outline: none; border-color: var(--accent); }
+
+.sectorSelect {
+  height: 40px; max-width: 220px; padding: 0 32px 0 12px;
+  border: 1px solid var(--line); border-radius: var(--radius-md);
+  background: var(--bg-elev); color: var(--ink); font-size: 14px;
+  box-shadow: var(--shadow-sm); cursor: pointer;
+}
+.sectorSelect:focus-visible { outline: none; border-color: var(--accent); }
+
+.count {
+  margin-left: auto; font-size: 12px; color: var(--ink-mute);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+/* ── Card grid ── */
+.grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 768px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1280px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+
+.card {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 16px; text-align: left;
+  border: 1px solid var(--line); border-radius: var(--radius-lg);
+  background: var(--bg-elev); box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-normal), transform var(--transition-fast);
+}
+.card:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: var(--shadow-md);
+}
+.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.cardTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.cardName {
+  font-size: 15px; font-weight: 600; line-height: 1.3; color: var(--ink);
+  /* clamp to 2 lines so cards stay even */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.ticker {
+  margin-top: 4px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-mute);
+  letter-spacing: 0.02em;
+}
+.tickerExch { color: var(--ink-faint); }
+.researchHint {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600; color: var(--accent);
+  opacity: 0; transition: opacity var(--transition-fast);
+}
+.card:hover .researchHint, .card:focus-visible .researchHint { opacity: 1; }
+
+.cardMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sectorTag {
+  padding: 3px 10px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-deep);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.01em;
+}
+.isin {
+  font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint);
+  letter-spacing: 0.03em;
+}
+
+/* ── Load more ── */
+.loadMoreRow { display: flex; justify-content: center; padding: 8px 0 4px; }
+.loadMore {
+  padding: 10px 24px; border-radius: var(--radius-md);
+  border: 1px solid var(--line); background: var(--bg-elev);
+  color: var(--ink-soft); font-size: 13px; font-weight: 600;
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+.loadMore:hover { border-color: var(--accent); color: var(--accent); }
+.loadMore:disabled { opacity: 0.5; cursor: default; }
+.endNote { text-align: center; padding: 8px 0; font-size: 12px; color: var(--ink-faint); }
+
+/* ── States ── */
+.empty, .errorBox {
+  padding: 40px 20px; text-align: center;
+  border: 1px dashed var(--line); border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
+}
+.errorBox { border-style: solid; border-color: color-mix(in srgb, var(--neg) 30%, transparent); background: var(--neg-soft); }
+.stateTitle { font-size: 15px; font-weight: 600; color: var(--ink); }
+.errorBox .stateTitle { color: var(--neg); }
+.stateText { margin: 8px auto 0; max-width: 36ch; font-size: 13px; line-height: 1.5; color: var(--ink-mute); }
+.retryBtn {
+  margin-top: 14px; padding: 8px 18px; border-radius: var(--radius-md);
+  border: 1px solid var(--neg); color: var(--neg); font-size: 13px; font-weight: 600;
+  transition: background var(--transition-fast);
+}
+.retryBtn:hover { background: color-mix(in srgb, var(--neg) 8%, transparent); }
+
+.skeletonCard {
+  height: 108px; border-radius: var(--radius-lg);
+  background: var(--bg-sunken); animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }

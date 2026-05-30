@@ -12,11 +12,12 @@ build/
 dist/
 
 # ── Environment (NEVER commit secrets) ──
+# ALL env files stay off git (incl. .env.example) — shared privately within
+# the team, never committed. Team policy: no `!.env.example` exception.
 .env
-.env.local
-.env.production
-.env.*.local
+.env.*
 thequantsoft/.env
+thequantsoft/.env.*
 
 # ── SSL / Credentials ──
 *.pem

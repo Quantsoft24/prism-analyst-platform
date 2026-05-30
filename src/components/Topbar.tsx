@@ -9,6 +9,7 @@ const VIEW_LABELS: Record<NavView, string> = {
   chat: "Research Chat",
   companies: "Companies",
   bmc: "Business Model Canvas",
+  news: "News & Sentiment",
   reports: "Reports Library",
   settings: "Settings",
 };
