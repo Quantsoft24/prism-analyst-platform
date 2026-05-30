@@ -136,6 +136,7 @@ export interface NewsSource {
 export interface NewsSourcesResponse {
   sources?: NewsSource[];
   total?: number;
+  total_sources?: number;
   [k: string]: unknown;
 }
 
@@ -251,7 +252,7 @@ export function useNewsFeed(
  *  `fetchNextPage` advances the `page` param. Changing company/sector/hours
  *  changes the query key, so React Query resets to page 1 automatically. The
  *  whole loaded set still refreshes on the 5-min cadence. */
-export const FEED_PAGE_SIZE = 40;
+export const FEED_PAGE_SIZE = 20;
 
 export function useInfiniteNewsFeed(params: Omit<FeedParams, "page" | "limit">) {
   return useInfiniteQuery({

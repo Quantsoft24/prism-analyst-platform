@@ -12,22 +12,7 @@ interface WatchlistPulseProps {
   hours: number;
   onRemove: (company: string) => void;
   onInvestigate: (company: string) => void;
-  /** One-click add from the empty-state quick picks. */
-  onAdd: (company: string) => void;
 }
-
-// Popular Indian names for one-click onboarding when the watchlist is empty
-// (inspired by the PRISM_ANALYST news page's quick picks).
-const QUICK_PICKS = [
-  "Reliance Industries",
-  "TCS",
-  "HDFC Bank",
-  "Infosys",
-  "ICICI Bank",
-  "SBI",
-  "Adani Enterprises",
-  "ITC",
-];
 
 /**
  * Watchlist Pulse — one card per watched company showing its live news verdict
@@ -40,26 +25,11 @@ export default function WatchlistPulse({
   hours,
   onRemove,
   onInvestigate,
-  onAdd,
 }: WatchlistPulseProps) {
-  if (watchlist.length === 0) {
-    return (
-      <div className={styles.empty}>
-        <div className={styles.emptyTitle}>Your watchlist is empty</div>
-        <div className={styles.emptyText}>
-          Track companies to see their live news sentiment here, side by side.
-          Saved on this device.
-        </div>
-        <div className={styles.quickPicks}>
-          {QUICK_PICKS.map((c) => (
-            <button key={c} className={styles.quickPick} onClick={() => onAdd(c)}>
-              + {c}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  // Parent only renders this when the watchlist is non-empty (it's the
+  // per-company sentiment dashboard above the feed). Empty-state + company
+  // selection now live in the chips bar in NewsView.
+  if (watchlist.length === 0) return null;
 
   return (
     <div className={styles.watchGrid}>

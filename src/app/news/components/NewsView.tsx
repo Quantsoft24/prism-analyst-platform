@@ -5,7 +5,6 @@ import * as React from "react";
 import {
   timeAgoFrom,
   useNewsSources,
-  useNewsStats,
   useNewsTrending,
   NEWS_REFRESH_MS,
   type NewsArticle,
@@ -16,7 +15,6 @@ import {
 import { useWatchlist } from "@/hooks/useWatchlist";
 import { cn } from "@/lib/utils";
 
-import CompareModal from "./CompareModal";
 import InvestigationDrawer from "./InvestigationDrawer";
 import NewsFeed from "./NewsFeed";
 import WatchlistPulse from "./WatchlistPulse";
@@ -29,6 +27,39 @@ const HOURS_OPTIONS = [
   { label: "10d", value: 240 },
 ];
 
+// Popular Indian names offered as one-click quick picks (inspired by the
+// PRISM_ANALYST news page). A deep pool so the suggestions never run dry —
+// the chips bar always surfaces the next untracked names from this list.
+const QUICK_PICKS = [
+  "Reliance Industries",
+  "TCS",
+  "HDFC Bank",
+  "Infosys",
+  "ICICI Bank",
+  "SBI",
+  "Adani Enterprises",
+  "ITC",
+  "Bharti Airtel",
+  "Larsen & Toubro",
+  "Axis Bank",
+  "Kotak Mahindra Bank",
+  "Bajaj Finance",
+  "Maruti Suzuki",
+  "Tata Motors",
+  "Sun Pharma",
+  "HCLTech",
+  "Wipro",
+  "Asian Paints",
+  "Titan",
+  "NTPC",
+  "Power Grid",
+  "Hindustan Unilever",
+  "JSW Steel",
+];
+
+// How many quick-pick suggestions to surface at once in the chips bar.
+const QUICK_PICK_VISIBLE = 8;
+
 interface NewsViewProps {
   /** Route a query into the chat page (Ask-PRISM-about-this-article). */
   onAsk?: (query: string) => void;
@@ -37,10 +68,13 @@ interface NewsViewProps {
 /**
  * News & Sentiment — PRISM's market-intelligence surface.
  *
- * Layout: status header → Today's Pulse → a two-column grid (watchlist + feed
- * on the left, a trending + sectors rail on the right). The Investigation
- * drawer is the agentic differentiator — "why is X moving?" runs a live agent
- * analysis inline. Auto-refreshes on the 5-min cadence via React Query.
+ * Layout (feed-first): status header → Today's Pulse → a company chips bar
+ * (track / remove / quick-pick) → a two-column grid. The feed is primary — all
+ * news by default, scoped to tracked companies' news when any are tracked; the
+ * per-company sentiment dashboard shows above the feed only when tracking. The
+ * right rail holds trending + sectors + sources. The Investigation drawer is
+ * the agentic differentiator — "why is X moving?" runs a live agent analysis
+ * inline. Auto-refreshes on the 5-min cadence via React Query.
  *
  * Styling: CSS Modules (news.module.css) + Lakshya design tokens — matches the
  * codebase convention (no inline styles, no utility classes). Mobile-first;
@@ -52,11 +86,12 @@ export default function NewsView({ onAsk }: NewsViewProps) {
   const [companyFilter, setCompanyFilter] = React.useState<string | undefined>(undefined);
   const [investigate, setInvestigate] = React.useState<string | null>(null);
   const [addInput, setAddInput] = React.useState("");
-  const [compareOpen, setCompareOpen] = React.useState(false);
+  // Sub-filter focus: a subset of tracked companies to scope the feed to
+  // (server-side, so alias resolution handles "TCS" → "Tata Consultancy…").
+  const [focus, setFocus] = React.useState<string[]>([]);
 
   const watchlist = useWatchlist();
   const trending = useNewsTrending(hours, 12);
-  const stats = useNewsStats();
   const sources = useNewsSources(hours);
 
   const handleAskArticle = React.useCallback(
@@ -77,13 +112,37 @@ export default function NewsView({ onAsk }: NewsViewProps) {
     setAddInput("");
   }, [addInput, watchlist]);
 
-  const live = !trending.isError && !stats.isError;
+  // Keep the sub-filter focus in sync with the watchlist (drop any company that
+  // was untracked).
+  React.useEffect(() => {
+    setFocus((prev) => prev.filter((c) => watchlist.watchlist.includes(c)));
+  }, [watchlist.watchlist]);
+
+  // Feed scope (reference behaviour): an explicit click on a trending company
+  // or a sector wins; otherwise, if the watchlist has names the feed shows
+  // THEIR combined news (or the focused subset); otherwise all news in window.
+  const watchlistScoped = !companyFilter && !sector && watchlist.watchlist.length > 0;
+  const focusActive = watchlistScoped && focus.length > 0;
+  const feedCompany = companyFilter
+    ?? (focusActive ? focus.join(",") : watchlistScoped ? watchlist.watchlist.join(",") : undefined);
+  // Companies offered in the feed's sub-filter dropdown (only meaningful when
+  // the feed is showing the multi-company watchlist).
+  const feedSubFilter = watchlistScoped && watchlist.watchlist.length > 1 ? watchlist.watchlist : undefined;
+  const feedTitle = companyFilter
+    ? `News · ${companyFilter}`
+    : sector
+      ? `${sector} news`
+      : watchlistScoped
+        ? "Your watchlist news"
+        : "Latest headlines";
+
+  const live = !trending.isError && !sources.isError;
+  // Source count comes from /sources (which we already fetch) — the old /stats
+  // call returned a shape without it, so the count was always blank.
   const sourceCount =
-    typeof stats.data?.sources_active === "number"
-      ? stats.data.sources_active
-      : typeof stats.data?.feeds === "number"
-        ? stats.data.feeds
-        : undefined;
+    typeof sources.data?.total_sources === "number"
+      ? sources.data.total_sources
+      : sources.data?.sources?.length;
 
   return (
     <div className={styles.page}>
@@ -117,76 +176,64 @@ export default function NewsView({ onAsk }: NewsViewProps) {
         </div>
       </header>
 
-      {/* ── Today's Pulse ── */}
+      {/* ── Today's Pulse ── temporarily disabled (see PulseStrip below) ──
       <PulseStrip
         trending={trending.data?.trending ?? []}
         loading={trending.isLoading}
         isError={trending.isError}
       />
+      */}
+
+      {/* ── Company chips bar — track companies to scope the feed ── */}
+      <ChipsBar
+        watchlist={watchlist.watchlist}
+        addInput={addInput}
+        isFull={watchlist.isFull}
+        onAddInput={setAddInput}
+        onAdd={handleAddWatch}
+        onPick={watchlist.add}
+        onRemove={watchlist.remove}
+        onClear={watchlist.clear}
+      />
 
       {/* ── Main grid ── */}
       <div className={styles.grid}>
-        {/* Left: watchlist + feed */}
+        {/* Left: sentiment dashboard (only when tracking) + feed */}
         <div className={styles.colMain}>
-          <section className={styles.section}>
-            <div className={styles.sectionHead}>
-              <h2 className={styles.sectionTitle}>Your watchlist</h2>
-              <div className={styles.addRow}>
-                {watchlist.watchlist.length >= 2 && (
-                  <button className={styles.compareBtn} onClick={() => setCompareOpen(true)}>
-                    Compare
-                  </button>
-                )}
-                <input
-                  value={addInput}
-                  onChange={(e) => setAddInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddWatch()}
-                  placeholder="Add a company…"
-                  className={styles.addInput}
-                />
-                <button
-                  onClick={handleAddWatch}
-                  disabled={!addInput.trim() || watchlist.isFull}
-                  className={styles.trackBtn}
-                >
-                  Track
-                </button>
+          {/* Per-company sentiment dashboard — shown only when tracking. */}
+          {watchlist.watchlist.length > 0 && (
+            <section className={styles.section}>
+              <div className={styles.sectionHead}>
+                <h2 className={styles.sectionTitle}>Tracked sentiment</h2>
               </div>
-            </div>
-            <WatchlistPulse
-              watchlist={watchlist.watchlist}
-              hours={hours}
-              onRemove={watchlist.remove}
-              onInvestigate={setInvestigate}
-              onAdd={watchlist.add}
-            />
-          </section>
+              <WatchlistPulse
+                watchlist={watchlist.watchlist}
+                hours={hours}
+                onRemove={watchlist.remove}
+                onInvestigate={setInvestigate}
+              />
+            </section>
+          )}
 
-          <section className={styles.section}>
-            <div className={styles.sectionHead}>
-              <h2 className={styles.sectionTitle}>
-                {companyFilter ? `News · ${companyFilter}` : sector ? `${sector} news` : "Latest headlines"}
-              </h2>
-              {(companyFilter || sector) && (
-                <button
-                  className={styles.clearBtn}
-                  onClick={() => {
+          <NewsFeed
+            title={feedTitle}
+            company={feedCompany}
+            sector={sector}
+            hours={hours}
+            subFilterOptions={feedSubFilter}
+            subFilter={focus}
+            onSubFilterChange={setFocus}
+            onClearScope={
+              companyFilter || sector
+                ? () => {
                     setSector(undefined);
                     setCompanyFilter(undefined);
-                  }}
-                >
-                  Clear filter ✕
-                </button>
-              )}
-            </div>
-            <NewsFeed
-              company={companyFilter}
-              sector={sector}
-              hours={hours}
-              onAsk={handleAskArticle}
-              onInvestigate={setInvestigate}
-            />
-          </section>
+                  }
+                : undefined
+            }
+            onAsk={handleAskArticle}
+            onInvestigate={setInvestigate}
+          />
         </div>
 
         {/* Right rail: trending + sectors */}
@@ -219,20 +266,11 @@ export default function NewsView({ onAsk }: NewsViewProps) {
             />
           </section>
 
-          <SourcesStrip
-            sources={sources.data}
-            lastFetch={typeof stats.data?.last_fetch === "string" ? stats.data.last_fetch : undefined}
-            loading={sources.isLoading}
-          />
+          <SourcesStrip sources={sources.data} loading={sources.isLoading} />
         </aside>
       </div>
 
       <InvestigationDrawer company={investigate} onClose={() => setInvestigate(null)} />
-      <CompareModal
-        companies={compareOpen ? watchlist.watchlist : []}
-        hours={hours}
-        onClose={() => setCompareOpen(false)}
-      />
     </div>
   );
 }
@@ -263,20 +301,101 @@ function LiveStatus({ updatedAt, isFetching }: { updatedAt: number; isFetching: 
   );
 }
 
+/* ── Company chips bar — track / remove / quick-pick companies ──────────── */
+
+function ChipsBar({
+  watchlist,
+  addInput,
+  isFull,
+  onAddInput,
+  onAdd,
+  onPick,
+  onRemove,
+  onClear,
+}: {
+  watchlist: string[];
+  addInput: string;
+  isFull: boolean;
+  onAddInput: (v: string) => void;
+  onAdd: () => void;
+  onPick: (c: string) => void;
+  onRemove: (c: string) => void;
+  onClear: () => void;
+}) {
+  const hasTracked = watchlist.length > 0;
+  // Always surface the next few untracked names from the pool, so suggestions
+  // never run dry as the user keeps adding companies.
+  const picks = QUICK_PICKS.filter((p) => !watchlist.includes(p)).slice(0, QUICK_PICK_VISIBLE);
+
+  return (
+    <section className={styles.chipsBar}>
+      <div className={styles.addRow}>
+        <input
+          value={addInput}
+          onChange={(e) => onAddInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && onAdd()}
+          placeholder="Track a company…"
+          className={styles.addInput}
+        />
+        <button
+          onClick={onAdd}
+          disabled={!addInput.trim() || isFull}
+          className={styles.trackBtn}
+        >
+          Track
+        </button>
+      </div>
+
+      {/* Tracked companies (removable) */}
+      {hasTracked && (
+        <div className={styles.chips}>
+          {watchlist.map((c) => (
+            <span key={c} className={cn(styles.chip, styles.chipActive)}>
+              {c}
+              <button
+                className={styles.chipRemove}
+                title={`Stop tracking ${c}`}
+                onClick={() => onRemove(c)}
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+          <button className={styles.clearChip} onClick={onClear}>
+            Clear all
+          </button>
+        </div>
+      )}
+
+      {/* Suggestions — always shown while the pool has untracked names */}
+      {picks.length > 0 && (
+        <div className={styles.chips}>
+          <span className={styles.quickPickLabel}>
+            {hasTracked ? "Add more:" : "Suggestions:"}
+          </span>
+          {picks.map((c) => (
+            <button key={c} className={styles.chip} onClick={() => onPick(c)}>
+              + {c}
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ── Source-reliability strip ───────────────────────────────────────────── */
 
 function SourcesStrip({
   sources,
-  lastFetch,
   loading,
 }: {
   sources?: NewsSourcesResponse;
-  lastFetch?: string;
   loading: boolean;
 }) {
   if (loading || !sources) return null;
   const list = sources.sources ?? [];
-  if (list.length === 0 && !lastFetch) return null;
+  if (list.length === 0) return null;
 
   const staleCount = list.filter((s) => s.stale === true).length;
   // Most recent "minutes since last article" across sources → freshness proxy.
@@ -289,8 +408,6 @@ function SourcesStrip({
   if (list.length) parts.push(`${list.length} sources`);
   if (typeof freshest === "number") {
     parts.push(`freshest ${freshest < 1 ? "<1m" : `${Math.round(freshest)}m`} ago`);
-  } else if (lastFetch) {
-    parts.push(`last fetch ${lastFetch.replace(" IST", "")}`);
   }
   if (staleCount > 0) parts.push(`${staleCount} stale`);
 
@@ -298,8 +415,12 @@ function SourcesStrip({
   return <div className={styles.sourcesStrip}>{parts.join(" · ")}</div>;
 }
 
-/* ── Today's Pulse — data-derived briefing (no agent call) ──────────────── */
-
+/* ── Today's Pulse — temporarily disabled ────────────────────────────────────
+ * Commented out per product decision (2026-05-30). The data-derived briefing
+ * (no agent call) is preserved here for an easy re-enable: uncomment this block
+ * and the <PulseStrip /> usage in the page body above. `buildPulseInsights`
+ * (and its `titleCase` helper at the bottom of the file) come back with it.
+ *
 function PulseStrip({
   trending,
   loading,
@@ -406,6 +527,7 @@ function buildPulseInsights(trending: TrendingCompany[]): PulseInsight[] {
 
   return out.slice(0, 3);
 }
+*/
 
 /* ── Trending rail ──────────────────────────────────────────────────────── */
 
@@ -517,6 +639,8 @@ function SectorList({
   );
 }
 
-function titleCase(s: string): string {
-  return s.charAt(0) + s.slice(1).toLowerCase();
-}
+// titleCase — used only by the (currently disabled) Today's Pulse helper above.
+// Re-enable alongside `buildPulseInsights` / `PulseStrip`.
+// function titleCase(s: string): string {
+//   return s.charAt(0) + s.slice(1).toLowerCase();
+// }
