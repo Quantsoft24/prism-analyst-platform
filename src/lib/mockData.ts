@@ -13,7 +13,7 @@ export const MOCK_USER = {
 };
 
 /* ── Navigation ── */
-export type NavView = "dashboard" | "chat" | "companies" | "bmc" | "reports" | "settings";
+export type NavView = "dashboard" | "chat" | "companies" | "bmc" | "news" | "reports" | "settings";
 
 export interface NavItem {
   id: NavView;
@@ -27,6 +27,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "chat", label: "Research Chat", icon: "chat", badge: "12" },
   { id: "companies", label: "Companies", icon: "companies" },
   { id: "bmc", label: "Business Models", icon: "bmc" },
+  { id: "news", label: "News & Sentiment", icon: "news" },
   { id: "reports", label: "Reports Library", icon: "reports" },
   { id: "settings", label: "Settings", icon: "settings" },
 ];

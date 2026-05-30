@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { cn } from "@/lib/utils";
-import { MOCK_USER, type IntentConfig } from "@/lib/mockData";
+import { MOCK_USER, type IntentConfig, type IntentType } from "@/lib/mockData";
 import { useToast } from "@/components/Toast";
 import type { Citation } from "@/lib/api/chat";
 import type {
@@ -24,6 +24,9 @@ import styles from "./ChatLayout.module.css";
 interface ChatLayoutProps {
   messages: ChatMessage[];
   intentConfig: IntentConfig;
+  /** Auto-detected intent (from useChat → routeIntent). Drives which
+   *  segmented-control tab the Research-mode banner highlights. */
+  activeIntent: IntentType | null;
   showWorkspace: boolean;
   phase: Phase;
   runMeta: RunMeta;
@@ -1104,6 +1107,7 @@ function SourcesView({
 export default function ChatLayout({
   messages,
   intentConfig,
+  activeIntent,
   showWorkspace,
   phase,
   runMeta,
@@ -1285,9 +1289,13 @@ export default function ChatLayout({
         {/* Messages */}
         <div className={styles.messages}>
           {/* Mode banner — research mode label + multi-company mode tabs.
-              Compare / Watchlist are visual-only today (backend doesn't
-              support multi-ticker turns yet) — both are disabled with a
-              "soon" hint. Single is the current mode and is always active. */}
+              Compare auto-activates when the intent router (mockData.ts →
+              routeIntent) detects a compare query ("vs", "compare", "peer",
+              "benchmark"). Watchlist is still backend-pending — kept
+              disabled until the multi-ticker streaming path lands. Single
+              is the default for everything else. The user can't manually
+              switch modes today (the router is the single source of
+              truth); a future iteration will add a click-to-override. */}
           <div className={styles.modeBanner}>
             <svg
               width="14"
@@ -1304,16 +1312,22 @@ export default function ChatLayout({
             <div className={styles.modeBannerTabs}>
               <button
                 type="button"
-                className={cn(styles.modeTab, styles.modeTabActive)}
-                aria-current="true"
+                className={cn(
+                  styles.modeTab,
+                  activeIntent !== "compare" && styles.modeTabActive,
+                )}
+                aria-current={activeIntent !== "compare" ? "true" : undefined}
               >
                 Single
               </button>
               <button
                 type="button"
-                className={styles.modeTab}
-                disabled
-                title="Compare two or more companies — coming soon"
+                className={cn(
+                  styles.modeTab,
+                  activeIntent === "compare" && styles.modeTabActive,
+                )}
+                aria-current={activeIntent === "compare" ? "true" : undefined}
+                title="Compare mode — auto-detected from queries like 'compare X and Y', 'X vs Y', 'peer benchmark'"
               >
                 Compare
               </button>
