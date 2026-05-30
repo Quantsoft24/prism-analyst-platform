@@ -312,6 +312,74 @@
 .railSkeletonRow { height: 52px; border-bottom: 1px solid var(--line-soft); background: var(--bg-sunken); animation: shimmer 1.4s ease-in-out infinite; }
 .railSkeletonRow:last-child { border-bottom: none; }
 
+/* ── Live refresh status (header) ────────────────────────────────────────── */
+.liveStatus {
+  margin-top: 8px; font-size: 11px; font-variant-numeric: tabular-nums;
+  color: var(--ink-faint); letter-spacing: 0.01em;
+}
+.liveStatus.stale { color: var(--warn); }
+
+/* ── Feed: top row + sentiment filter pills ──────────────────────────────── */
+.feedTopRow {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 8px;
+}
+.filterPills { display: inline-flex; gap: 4px; }
+.filterPill {
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--bg-elev);
+  font-size: 11px; font-weight: 600; color: var(--ink-mute);
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+.filterPill:hover { color: var(--ink); }
+.filterPillActive { background: var(--ink); color: var(--bg-elev); border-color: var(--ink); }
+.filterPillActive.filterPillPos { background: var(--pos); border-color: var(--pos); color: #fff; }
+.filterPillActive.filterPillNeg { background: var(--neg); border-color: var(--neg); color: #fff; }
+
+/* ── Quick picks (empty watchlist) ───────────────────────────────────────── */
+.quickPicks { margin-top: 16px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.quickPick {
+  padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--bg-elev);
+  font-size: 12px; font-weight: 500; color: var(--ink-soft);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.quickPick:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ── Compare button (watchlist header) ───────────────────────────────────── */
+.compareBtn {
+  padding: 8px 14px; border-radius: var(--radius-md);
+  border: 1px solid var(--accent); background: var(--accent-soft);
+  font-size: 12px; font-weight: 600; color: var(--accent-deep);
+  transition: background var(--transition-fast);
+}
+.compareBtn:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+
+/* ── Compare modal body ──────────────────────────────────────────────────── */
+.compareList { display: flex; flex-direction: column; gap: 14px; }
+.compareRow {
+  padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+}
+.compareRowHead { display: flex; align-items: center; gap: 10px; }
+.compareRank {
+  width: 22px; height: 22px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; background: var(--bg-sunken);
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink-mute);
+}
+.compareName { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compareVerdict { font-size: 13px; font-weight: 600; }
+.compareMeta { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--ink-mute); }
+
+/* ── Source-reliability strip (rail footer) ──────────────────────────────── */
+.sourcesStrip {
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-md);
+  background: var(--bg-sunken); font-size: 11px; color: var(--ink-mute);
+  letter-spacing: 0.01em;
+}
+
 /* ── Investigation drawer ────────────────────────────────────────────────── */
 .scrim {
   position: fixed; inset: 0; z-index: 40;

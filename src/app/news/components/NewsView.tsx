@@ -3,15 +3,20 @@
 import * as React from "react";
 
 import {
+  timeAgoFrom,
+  useNewsSources,
   useNewsStats,
   useNewsTrending,
+  NEWS_REFRESH_MS,
   type NewsArticle,
+  type NewsSourcesResponse,
   type SectorCode,
   type TrendingCompany,
 } from "@/lib/api/news";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import { cn } from "@/lib/utils";
 
+import CompareModal from "./CompareModal";
 import InvestigationDrawer from "./InvestigationDrawer";
 import NewsFeed from "./NewsFeed";
 import WatchlistPulse from "./WatchlistPulse";
@@ -47,10 +52,12 @@ export default function NewsView({ onAsk }: NewsViewProps) {
   const [companyFilter, setCompanyFilter] = React.useState<string | undefined>(undefined);
   const [investigate, setInvestigate] = React.useState<string | null>(null);
   const [addInput, setAddInput] = React.useState("");
+  const [compareOpen, setCompareOpen] = React.useState(false);
 
   const watchlist = useWatchlist();
   const trending = useNewsTrending(hours, 12);
   const stats = useNewsStats();
+  const sources = useNewsSources(hours);
 
   const handleAskArticle = React.useCallback(
     (article: NewsArticle) => {
@@ -92,8 +99,9 @@ export default function NewsView({ onAsk }: NewsViewProps) {
           <h1 className={styles.title}>News &amp; Sentiment</h1>
           <p className={styles.subtitle}>
             Live Indian-market headlines with AI sentiment
-            {sourceCount ? ` · ${sourceCount.toLocaleString()} sources` : ""} · refreshes every 5 min
+            {sourceCount ? ` · ${sourceCount.toLocaleString()} sources` : ""}
           </p>
+          <LiveStatus updatedAt={trending.dataUpdatedAt} isFetching={trending.isFetching} />
         </div>
 
         <div className={styles.windowSelector}>
@@ -124,6 +132,11 @@ export default function NewsView({ onAsk }: NewsViewProps) {
             <div className={styles.sectionHead}>
               <h2 className={styles.sectionTitle}>Your watchlist</h2>
               <div className={styles.addRow}>
+                {watchlist.watchlist.length >= 2 && (
+                  <button className={styles.compareBtn} onClick={() => setCompareOpen(true)}>
+                    Compare
+                  </button>
+                )}
                 <input
                   value={addInput}
                   onChange={(e) => setAddInput(e.target.value)}
@@ -145,6 +158,7 @@ export default function NewsView({ onAsk }: NewsViewProps) {
               hours={hours}
               onRemove={watchlist.remove}
               onInvestigate={setInvestigate}
+              onAdd={watchlist.add}
             />
           </section>
 
@@ -204,12 +218,84 @@ export default function NewsView({ onAsk }: NewsViewProps) {
               }}
             />
           </section>
+
+          <SourcesStrip
+            sources={sources.data}
+            lastFetch={typeof stats.data?.last_fetch === "string" ? stats.data.last_fetch : undefined}
+            loading={sources.isLoading}
+          />
         </aside>
       </div>
 
       <InvestigationDrawer company={investigate} onClose={() => setInvestigate(null)} />
+      <CompareModal
+        companies={compareOpen ? watchlist.watchlist : []}
+        hours={hours}
+        onClose={() => setCompareOpen(false)}
+      />
     </div>
   );
+}
+
+/* ── Live refresh status — ticks every second off React Query's updatedAt ── */
+
+function LiveStatus({ updatedAt, isFetching }: { updatedAt: number; isFetching: boolean }) {
+  // Re-render every second so "updated Xs ago / next in Ys" stays live.
+  const [, setTick] = React.useState(0);
+  React.useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (!updatedAt) return null;
+  const sinceMs = Date.now() - updatedAt;
+  const stale = sinceMs > NEWS_REFRESH_MS * 1.5;
+  const nextInSec = Math.max(0, Math.ceil((NEWS_REFRESH_MS - sinceMs) / 1000));
+  const nextLabel =
+    nextInSec >= 60 ? `${Math.ceil(nextInSec / 60)}m` : `${nextInSec}s`;
+
+  return (
+    <div className={cn(styles.liveStatus, stale && styles.stale)}>
+      {isFetching
+        ? "Refreshing…"
+        : `Updated ${timeAgoFrom(updatedAt) || "just now"} · next refresh in ${nextLabel}`}
+    </div>
+  );
+}
+
+/* ── Source-reliability strip ───────────────────────────────────────────── */
+
+function SourcesStrip({
+  sources,
+  lastFetch,
+  loading,
+}: {
+  sources?: NewsSourcesResponse;
+  lastFetch?: string;
+  loading: boolean;
+}) {
+  if (loading || !sources) return null;
+  const list = sources.sources ?? [];
+  if (list.length === 0 && !lastFetch) return null;
+
+  const staleCount = list.filter((s) => s.stale === true).length;
+  // Most recent "minutes since last article" across sources → freshness proxy.
+  const mins = list
+    .map((s) => s.minutes_since_last ?? s.last_article_minutes)
+    .filter((m): m is number => typeof m === "number");
+  const freshest = mins.length ? Math.min(...mins) : undefined;
+
+  const parts: string[] = [];
+  if (list.length) parts.push(`${list.length} sources`);
+  if (typeof freshest === "number") {
+    parts.push(`freshest ${freshest < 1 ? "<1m" : `${Math.round(freshest)}m`} ago`);
+  } else if (lastFetch) {
+    parts.push(`last fetch ${lastFetch.replace(" IST", "")}`);
+  }
+  if (staleCount > 0) parts.push(`${staleCount} stale`);
+
+  if (parts.length === 0) return null;
+  return <div className={styles.sourcesStrip}>{parts.join(" · ")}</div>;
 }
 
 /* ── Today's Pulse — data-derived briefing (no agent call) ──────────────── */

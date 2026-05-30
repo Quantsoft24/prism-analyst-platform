@@ -13,7 +13,12 @@
  *    company/window can take 5-10s (OpenAI scores articles); repeats are fast.
  */
 
-import { useMutation, useQuery, type UseQueryOptions } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  type UseQueryOptions,
+} from "@tanstack/react-query";
 
 import { apiClient } from "./client";
 
@@ -115,6 +120,45 @@ export interface NewsHealth {
   feeds?: number;
 }
 
+/** One row from /news/sources. Defensive — the upstream shape varies; we read
+ *  what's present and tolerate extra keys. */
+export interface NewsSource {
+  source?: string;
+  name?: string;
+  count?: number;
+  articles?: number;
+  minutes_since_last?: number;
+  last_article_minutes?: number;
+  stale?: boolean;
+  [k: string]: unknown;
+}
+
+export interface NewsSourcesResponse {
+  sources?: NewsSource[];
+  total?: number;
+  [k: string]: unknown;
+}
+
+/** /news/compare → per-company summaries ranked by avg_score (best→worst).
+ *  The upstream may key the array as `comparison`, `results`, or `companies`;
+ *  we normalise at the hook. Each row is summary-shaped. */
+export interface CompareRow {
+  company: string;
+  trend?: TrendVerdict;
+  avg_score?: number;
+  total_articles?: number;
+  sentiment_breakdown?: SentimentBreakdown;
+  provider?: "openai" | "heuristic";
+  [k: string]: unknown;
+}
+
+export interface CompareResponse {
+  comparison?: CompareRow[];
+  results?: CompareRow[];
+  companies?: CompareRow[] | string[];
+  [k: string]: unknown;
+}
+
 // ── Query params ────────────────────────────────────────────────────────────
 
 export interface FeedParams {
@@ -160,14 +204,29 @@ export const newsApi = {
   health(signal?: AbortSignal): Promise<NewsHealth> {
     return apiClient.get<NewsHealth>(`${base}/health`, { signal });
   },
+  sources(hours = 24, signal?: AbortSignal): Promise<NewsSourcesResponse> {
+    return apiClient.get<NewsSourcesResponse>(`${base}/sources`, {
+      query: { hours },
+      signal,
+    });
+  },
+  compare(companies: string, hours = 48, signal?: AbortSignal): Promise<CompareResponse> {
+    return apiClient.get<CompareResponse>(`${base}/compare`, {
+      query: { companies, hours },
+      signal,
+    });
+  },
 };
 
 export const newsKeys = {
   all: ["news"] as const,
   feed: (p: FeedParams) => ["news", "feed", p] as const,
+  feedInfinite: (p: Omit<FeedParams, "page">) => ["news", "feed-inf", p] as const,
   summary: (company: string, hours: number) => ["news", "summary", company, hours] as const,
   trending: (hours: number, limit: number) => ["news", "trending", hours, limit] as const,
   stats: () => ["news", "stats"] as const,
+  sources: (hours: number) => ["news", "sources", hours] as const,
+  compare: (companies: string, hours: number) => ["news", "compare", companies, hours] as const,
 };
 
 // 5-minute auto-refresh, matching the upstream's 10-min fetch cadence + the
@@ -185,6 +244,27 @@ export function useNewsFeed(
     queryFn: ({ signal }) => newsApi.feed(params, signal),
     refetchInterval: NEWS_REFRESH_MS,
     ...options,
+  });
+}
+
+/** Paginated feed with "Load more" (append). Each page is `PAGE_SIZE` articles;
+ *  `fetchNextPage` advances the `page` param. Changing company/sector/hours
+ *  changes the query key, so React Query resets to page 1 automatically. The
+ *  whole loaded set still refreshes on the 5-min cadence. */
+export const FEED_PAGE_SIZE = 40;
+
+export function useInfiniteNewsFeed(params: Omit<FeedParams, "page" | "limit">) {
+  return useInfiniteQuery({
+    queryKey: newsKeys.feedInfinite(params),
+    queryFn: ({ pageParam, signal }) =>
+      newsApi.feed({ ...params, page: pageParam as number, limit: FEED_PAGE_SIZE }, signal),
+    initialPageParam: 1,
+    getNextPageParam: (last) => {
+      const m = last.meta;
+      if (!m) return undefined;
+      return m.current_page < m.total_pages ? m.current_page + 1 : undefined;
+    },
+    refetchInterval: NEWS_REFRESH_MS,
   });
 }
 
@@ -227,6 +307,48 @@ export function useNewsStats(
     refetchInterval: NEWS_REFRESH_MS,
     ...options,
   });
+}
+
+export function useNewsSources(
+  hours = 24,
+  options?: Omit<UseQueryOptions<NewsSourcesResponse, Error>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: newsKeys.sources(hours),
+    queryFn: ({ signal }) => newsApi.sources(hours, signal),
+    refetchInterval: NEWS_REFRESH_MS,
+    ...options,
+  });
+}
+
+/** Multi-company sentiment compare. `enabled` gates until ≥1 company is given;
+ *  cold companies can be slow (OpenAI), so retry once. Normalise the row array
+ *  at the call site via `compareRows()`. */
+export function useNewsCompare(
+  companies: string[],
+  hours = 48,
+  options?: Omit<UseQueryOptions<CompareResponse, Error>, "queryKey" | "queryFn" | "enabled">,
+) {
+  const csv = companies.join(",");
+  return useQuery({
+    queryKey: newsKeys.compare(csv, hours),
+    queryFn: ({ signal }) => newsApi.compare(csv, hours, signal),
+    enabled: companies.length > 0,
+    retry: 1,
+    ...options,
+  });
+}
+
+/** Pull the ranked rows out of a CompareResponse regardless of which key the
+ *  upstream used (comparison | results | companies), dropping bare-string
+ *  shapes. Sorted best→worst by avg_score when present. */
+export function compareRows(resp?: CompareResponse): CompareRow[] {
+  if (!resp) return [];
+  const raw = resp.comparison ?? resp.results ?? resp.companies ?? [];
+  const rows = (raw as unknown[]).filter(
+    (r): r is CompareRow => typeof r === "object" && r !== null && "company" in r,
+  );
+  return [...rows].sort((a, b) => (b.avg_score ?? 0) - (a.avg_score ?? 0));
 }
 
 // Mutation form of summary — used by the Watchlist to fetch each company's
@@ -273,6 +395,20 @@ export function timeAgo(istDateStr?: string): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+/** Relative time from an epoch-ms timestamp (e.g. React Query's
+ *  `dataUpdatedAt`). "just now" / "Xs ago" / "Xm ago" / "Xh ago". */
+export function timeAgoFrom(ms?: number): string {
+  if (!ms) return "";
+  const diff = Date.now() - ms;
+  if (diff < 0) return "just now";
+  const secs = Math.floor(diff / 1000);
+  if (secs < 5) return "just now";
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.floor(mins / 60)}h ago`;
 }
 
 /** Net sentiment score in [-1, 1] from a breakdown — drives heatmap color. */

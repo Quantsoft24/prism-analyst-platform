@@ -2,7 +2,13 @@
 
 import * as React from "react";
 
-import { timeAgo, useNewsFeed, type NewsArticle, type SectorCode } from "@/lib/api/news";
+import {
+  timeAgo,
+  useInfiniteNewsFeed,
+  type NewsArticle,
+  type SectorCode,
+  type SentimentLabel,
+} from "@/lib/api/news";
 import { cn } from "@/lib/utils";
 
 import styles from "./news.module.css";
@@ -17,32 +23,75 @@ interface NewsFeedProps {
   onInvestigate: (company: string) => void;
 }
 
-const PAGE_LIMIT = 40;
+type SentimentFilter = "all" | SentimentLabel;
 
 /**
- * The headline feed. Each article exposes "Ask PRISM" (routes the headline into
- * chat) and, when a company is tagged, "Why is it moving?" (the investigation
- * drawer). Sentiment chip per article when the upstream scored it. Graceful
- * loading / empty / error states. CSS Modules; responsive padding.
+ * The headline feed — paginated via "Load more" (append) and, when a company
+ * filter is active, filterable by sentiment. Each article exposes "Ask PRISM"
+ * and (when a company is tagged) "Why is it moving?". CSS Modules; responsive.
  */
 export default function NewsFeed({ company, sector, hours, onAsk, onInvestigate }: NewsFeedProps) {
-  const { data, isLoading, isError, error, isFetching } = useNewsFeed({
-    company,
-    sector,
-    hours,
-    limit: PAGE_LIMIT,
-  });
+  const [sentiment, setSentiment] = React.useState<SentimentFilter>("all");
 
-  const articles = data?.articles ?? [];
+  // Reset the sentiment filter whenever the feed scope changes.
+  React.useEffect(() => {
+    setSentiment("all");
+  }, [company, sector, hours]);
+
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    isFetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteNewsFeed({ company, sector, hours });
+
+  const allArticles = React.useMemo(
+    () => (data?.pages ?? []).flatMap((p) => p.articles ?? []),
+    [data],
+  );
+  const total = data?.pages?.[0]?.meta?.total_results ?? 0;
+
+  // Sentiment filtering only makes sense on a company feed (the general feed's
+  // sentiment is lazily scored → mostly null, filtering would empty it).
+  const sentimentApplicable = !!company;
+  const articles = React.useMemo(() => {
+    if (!sentimentApplicable || sentiment === "all") return allArticles;
+    return allArticles.filter((a) => a.sentiment?.label === sentiment);
+  }, [allArticles, sentiment, sentimentApplicable]);
 
   return (
     <div className={styles.section}>
-      {data?.meta && !isLoading && (
-        <span className={styles.feedMeta}>
-          {data.meta.total_results.toLocaleString()} headlines in the last {hours}h
-          {isFetching ? " · refreshing…" : ""}
-        </span>
-      )}
+      {/* meta + sentiment filter row */}
+      <div className={styles.feedTopRow}>
+        {total > 0 && !isLoading && (
+          <span className={styles.feedMeta}>
+            {total.toLocaleString()} headlines in the last {hours}h
+            {isFetching && !isFetchingNextPage ? " · refreshing…" : ""}
+          </span>
+        )}
+        {sentimentApplicable && allArticles.length > 0 && (
+          <div className={styles.filterPills}>
+            {(["all", "positive", "neutral", "negative"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSentiment(s)}
+                className={cn(
+                  styles.filterPill,
+                  sentiment === s && styles.filterPillActive,
+                  sentiment === s && s === "positive" && styles.filterPillPos,
+                  sentiment === s && s === "negative" && styles.filterPillNeg,
+                )}
+              >
+                {s === "all" ? "All" : s[0].toUpperCase() + s.slice(1)}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {isLoading && (
         <div className={styles.skeletonList}>
@@ -61,9 +110,13 @@ export default function NewsFeed({ company, sector, hours, onAsk, onInvestigate 
 
       {!isLoading && !isError && articles.length === 0 && (
         <div className={styles.empty}>
-          <div className={styles.emptyTitle}>No headlines found</div>
+          <div className={styles.emptyTitle}>
+            {allArticles.length > 0 ? "No matching headlines" : "No headlines found"}
+          </div>
           <div className={styles.emptyText}>
-            Try a wider time window, a different company, or clear the sector filter.
+            {allArticles.length > 0
+              ? "No articles match this sentiment filter — try 'All'."
+              : "Try a wider time window, a different company, or clear the sector filter."}
           </div>
         </div>
       )}
@@ -78,6 +131,27 @@ export default function NewsFeed({ company, sector, hours, onAsk, onInvestigate 
               onInvestigate={onInvestigate}
             />
           ))}
+        </div>
+      )}
+
+      {/* Load more / end-note */}
+      {!isLoading && !isError && allArticles.length > 0 && (
+        <div className={styles.loadMoreRow}>
+          {hasNextPage ? (
+            <button
+              className={styles.loadMore}
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+            >
+              {isFetchingNextPage
+                ? "Loading…"
+                : `Load more (${allArticles.length.toLocaleString()} of ${total.toLocaleString()})`}
+            </button>
+          ) : (
+            <span className={styles.endNote}>
+              Showing all {total.toLocaleString()} headlines in the last {hours}h
+            </span>
+          )}
         </div>
       )}
     </div>
