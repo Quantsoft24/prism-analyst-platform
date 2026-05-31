@@ -4,7 +4,7 @@ import * as React from "react";
 
 import {
   commonPct,
-  formatFinValue,
+  formatCrorePlain,
   formatPct,
   yoyPct,
   type FinancialNode,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/api/stocks";
 import { cn } from "@/lib/utils";
 
+import { useColumnResize } from "./useColumnResize";
 import styles from "./stocks.module.css";
 
 /** "2025-03" → "FY25". */
@@ -28,13 +29,14 @@ interface BalanceSheetTableProps {
   view: FinView;
   expanded: Set<string>;
   onToggle: (key: string) => void;
-  onAsk: (node: FinancialNode) => void;
+  // onAsk?: (node: FinancialNode) => void;  // Ask feature parked (future release)
 }
 
 /**
  * Tree table: line items (indented by depth, expandable) × fiscal-year columns.
- * Cells render per the active view — Value (₹ Cr), YoY %, or % of section total
- * (common-size). Large YoY moves are highlighted to surface "what changed".
+ * Cells render per the active view — Value (₹ crore, plain), YoY %, or % of
+ * section total (common-size). Large YoY moves are highlighted. The Line Item
+ * column is drag-resizable (the handle on its header).
  */
 export default function BalanceSheetTable({
   years,
@@ -42,14 +44,24 @@ export default function BalanceSheetTable({
   view,
   expanded,
   onToggle,
-  onAsk,
 }: BalanceSheetTableProps) {
+  // Drag-resizable first column (shared with the income statement).
+  const { startResize, tableStyle } = useColumnResize(years.length);
+
   return (
     <div className={styles.bsScroll}>
-      <table className={styles.bsTable}>
+      <table className={styles.bsTable} style={tableStyle}>
         <thead>
           <tr>
-            <th className={cn(styles.bsHeadCell, styles.bsLabelCol)}>Line item</th>
+            <th className={cn(styles.bsHeadCell, styles.bsLabelCol)}>
+              Line item
+              <span
+                className={styles.bsResizer}
+                onPointerDown={startResize}
+                role="separator"
+                aria-label="Resize column"
+              />
+            </th>
             {years.map((y) => (
               <th key={y} className={styles.bsHeadCell}>{yearLabel(y)}</th>
             ))}
@@ -65,7 +77,6 @@ export default function BalanceSheetTable({
               view={view}
               expanded={expanded}
               onToggle={onToggle}
-              onAsk={onAsk}
             />
           ))}
         </tbody>
@@ -81,7 +92,6 @@ function Rows({
   view,
   expanded,
   onToggle,
-  onAsk,
 }: {
   node: FinancialNode;
   base: Record<string, number | null>;
@@ -89,7 +99,6 @@ function Rows({
   view: FinView;
   expanded: Set<string>;
   onToggle: (key: string) => void;
-  onAsk: (node: FinancialNode) => void;
 }) {
   const hasChildren = node.children.length > 0;
   const isOpen = expanded.has(node.key);
@@ -110,6 +119,7 @@ function Rows({
             <span className={styles.bsCaretSpace} />
           )}
           <span className={styles.bsLabel}>{node.label}</span>
+          {/* Ask PRISM — parked for a future release (kept for re-enable):
           <button
             className={styles.bsAsk}
             onClick={() => onAsk(node)}
@@ -117,12 +127,13 @@ function Rows({
           >
             Ask
           </button>
+          */}
         </td>
 
         {years.map((y, i) => {
           const v = node.values[y];
           if (view === "value") {
-            return <td key={y} className={styles.bsCell}>{formatFinValue(v)}</td>;
+            return <td key={y} className={styles.bsCell}>{formatCrorePlain(v)}</td>;
           }
           if (view === "yoy") {
             const p = i > 0 ? yoyPct(node.values[years[i - 1]], v) : null;
@@ -159,7 +170,6 @@ function Rows({
             view={view}
             expanded={expanded}
             onToggle={onToggle}
-            onAsk={onAsk}
           />
         ))}
     </>

@@ -69,6 +69,55 @@ export interface BalanceSheetResponse {
   sections: FinancialNode[];
 }
 
+// Income Statement (sequential)
+export interface IncomeRow {
+  key: string;
+  label: string;
+  emphasis: boolean;
+  sign: "plus" | "minus" | null;
+  info: string | null;
+  values: Record<string, number | null>;
+}
+
+export interface IncomeStatementResponse {
+  security_id: number;
+  basis: FinancialBasis;
+  available_bases: FinancialBasis[];
+  years: string[];
+  rows: IncomeRow[];
+}
+
+// Reports Viewer (filings) — from the stock-chat service, called directly.
+export type ReportCategory =
+  | "Annual Report" | "Result" | "Board Meeting" | "AGM/EGM"
+  | "Corp. Action" | "Company Update" | "Insider Trading / SAST" | "Others";
+
+export const REPORT_CATEGORIES: ReportCategory[] = [
+  "Annual Report", "Result", "Board Meeting", "AGM/EGM",
+  "Corp. Action", "Company Update", "Insider Trading / SAST", "Others",
+];
+
+export interface ReportFiling {
+  newsid: string;
+  announcement_dt: string;
+  category: string;
+  subcategory: string | null;
+  headline: string | null;
+  news_subject: string | null;
+  pdf_link: string | null;
+}
+
+export interface ReportsResponse {
+  company: string;
+  resolved_company: string | null;
+  category: string;
+  order: string;
+  total: number;
+  limit: number;
+  offset: number;
+  filings: ReportFiling[];
+}
+
 // ── Metrics (the y-axis dropdown) ───────────────────────────────────────────
 
 export type StockMetric =
@@ -124,6 +173,25 @@ export const stocksApi = {
       signal,
     });
   },
+  incomeStatement(securityId: number, basis: FinancialBasis, signal?: AbortSignal): Promise<IncomeStatementResponse> {
+    return apiClient.get<IncomeStatementResponse>(`${base}/${securityId}/income-statement`, {
+      query: { basis },
+      signal,
+    });
+  },
+  /** Filings list — via PRISM's `/api/v1/stocks/reports` proxy to stock-chat. */
+  reports(
+    company: string,
+    category: ReportCategory,
+    limit: number,
+    offset = 0,
+    signal?: AbortSignal,
+  ): Promise<ReportsResponse> {
+    return apiClient.get<ReportsResponse>(`${base}/reports`, {
+      query: { company, category, limit, offset, order: "desc" },
+      signal,
+    });
+  },
 };
 
 export const stocksKeys = {
@@ -133,6 +201,10 @@ export const stocksKeys = {
     ["stocks", "prices", securityId, range] as const,
   balanceSheet: (securityId: number, basis: FinancialBasis) =>
     ["stocks", "balance-sheet", securityId, basis] as const,
+  incomeStatement: (securityId: number, basis: FinancialBasis) =>
+    ["stocks", "income-statement", securityId, basis] as const,
+  reports: (company: string, category: ReportCategory, limit: number, offset: number) =>
+    ["stocks", "reports", company, category, limit, offset] as const,
 };
 
 // ── Hooks ─────────────────────────────────────────────────────────────────
@@ -178,6 +250,40 @@ export function useBalanceSheet(
     queryFn: ({ signal }) => stocksApi.balanceSheet(securityId as number, basis, signal),
     enabled: securityId != null,
     staleTime: DAY_MS,
+    placeholderData: keepPreviousData,
+    ...options,
+  });
+}
+
+/** A security's income statement (10-year sequential P&L) for a basis. */
+export function useIncomeStatement(
+  securityId: number | null,
+  basis: FinancialBasis,
+  options?: Omit<UseQueryOptions<IncomeStatementResponse, Error>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: stocksKeys.incomeStatement(securityId ?? 0, basis),
+    queryFn: ({ signal }) => stocksApi.incomeStatement(securityId as number, basis, signal),
+    enabled: securityId != null,
+    staleTime: DAY_MS,
+    placeholderData: keepPreviousData,
+    ...options,
+  });
+}
+
+/** A company's filings for a category + page window (Reports Viewer). */
+export function useReports(
+  company: string | null,
+  category: ReportCategory,
+  limit: number,
+  offset: number,
+  options?: Omit<UseQueryOptions<ReportsResponse, Error>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: stocksKeys.reports(company ?? "", category, limit, offset),
+    queryFn: ({ signal }) => stocksApi.reports(company as string, category, limit, offset, signal),
+    enabled: !!company,
+    staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
     ...options,
   });
@@ -311,6 +417,15 @@ export type FinView = "value" | "yoy" | "common";
 /** A financial amount (₹ crore) for the table — compact ₹ Cr / K Cr / L Cr. */
 export function formatFinValue(v: number | null | undefined): string {
   return v == null || Number.isNaN(v) ? "—" : formatChartValue(v, "cap");
+}
+
+/**
+ * Plain ₹-crore amount for the balance-sheet table's "Value (Cr)" view — the
+ * full number (Indian-grouped, no decimals, no ₹/Cr suffix; the column/view
+ * label carries the unit). e.g. 3760 → "3,760", -738573 → "-7,38,573".
+ */
+export function formatCrorePlain(v: number | null | undefined): string {
+  return v == null || Number.isNaN(v) ? "—" : inr0.format(v);
 }
 
 /** Year-over-year % change. */

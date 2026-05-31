@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import AnnualFinancials from "./AnnualFinancials";
 import MetricDropdown from "./MetricDropdown";
 import LatestStrip from "./LatestStrip";
+import ReportsViewer from "./ReportsViewer";
 import SecuritySearch from "./SecuritySearch";
 import styles from "./stocks.module.css";
 
@@ -191,6 +192,13 @@ export default function StockDashboardView({ onAsk }: StockDashboardViewProps) {
               <h2 className={styles.dashSectionTitle}>Annual Financials</h2>
             </div>
             <AnnualFinancials securityId={selected.security_id} security={header} onAsk={onAsk} />
+          </section>
+
+          {/* ── Reports Viewer + Announcements (two 50/50 panels) ── */}
+          <section className={styles.dashSection}>
+            <ReportsViewer
+              company={header?.security_name ?? selected.security_name ?? selected.symbol}
+            />
           </section>
         </div>
       )}

@@ -30,7 +30,9 @@
   font-weight: 500;
   line-height: 1.4;
   letter-spacing: 0.01em;
-  white-space: nowrap;
+  /* normal (not nowrap) so longer labels (e.g. the financials formula
+     tooltips) wrap within max-width; short sidebar labels stay one line. */
+  white-space: normal;
   background: var(--ink);
   color: var(--bg-elev);
   border-radius: 6px;
