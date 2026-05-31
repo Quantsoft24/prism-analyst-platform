@@ -11,7 +11,7 @@ and the gotchas we've already hit so we don't hit them again.
 | I want to... | Do this |
 |---|---|
 | Ship a code change (typical) | Open PR into `main` → review → merge as **merge commit** → open PR `main → production` → merge as **merge commit**. Auto-deploys on push to `production`. |
-| Change a backend env var (e.g. `BMC_URL`) | SSH to EC2, edit `~/PRISM/prism-analyst-services/.env`, `docker compose restart backend`. |
+| Change a backend env var (e.g. `BMC_URL`) | SSH to EC2, edit `~/PRISM/prism-analyst-services/.env`, then `docker compose ... up -d --force-recreate backend` (NOT `restart` — see Scenario 2). |
 | Change a frontend `NEXT_PUBLIC_*` var | Edit `docker-compose.prod.yml` `frontend.build.args` block, commit, deploy through git (build-time inlined). |
 | Add a new third-party API key | Add to `.env` on EC2 + add the setting to `src/config.py` + push the config change through git. |
 | Rollback | `docker tag` of the previous image + `docker compose up -d <service>` on EC2 — see [Rollback](#rollback). |
@@ -134,11 +134,15 @@ ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145
 nano ~/PRISM/prism-analyst-services/.env
 # add or change a line, e.g.  TAVILY_API_KEY=tvly-xxx
 
-# Restart just the backend so it re-reads .env
+# Re-create the backend so it picks up the new .env. Use --force-recreate,
+# NOT `restart`: with env_file:, Compose injects vars at CONTAINER CREATE time,
+# so `restart` keeps the OLD environment. --force-recreate rebuilds the
+# container with the new values.
 cd ~/PRISM/prism-analyst-platform
-docker compose -f docker-compose.prod.yml restart backend
+docker compose -f docker-compose.prod.yml up -d --force-recreate backend
 
-# Verify
+# Verify the var landed inside the container, then health
+docker compose -f docker-compose.prod.yml exec backend printenv | grep -i <VAR>
 docker compose -f docker-compose.prod.yml logs backend --tail 20
 curl https://api.thequantsoft.co.in/health
 ```
@@ -153,6 +157,18 @@ must be declared.
 out-of-band record (a password manager entry, a private repo, etc.) of its
 current contents. If the EC2 instance is replaced, you re-create the file
 from that record.
+
+**Feature env-var dependencies** (each degrades gracefully if unset — the
+relevant routes 503, the rest of the app is fine):
+
+| Feature | Backend `.env` vars | Other |
+|---|---|---|
+| News & Sentiment (`/api/v1/news/*`) | `PRISM_NEWS_URL` | the GCP VM's :8001 firewall must allow the EC2 IP |
+| Stock Dashboard (`/api/v1/stocks/*`) | `INVESTMENT_DB_HOST/PORT/NAME/USER/PASSWORD`, `INVESTMENT_DB_SSL_MODE=require` | the **investment RDS security group must allow the EC2 IP** (15.207.146.145), else connect-timeout |
+| Company catalog (`/api/v1/companies`) | `CATALOG_DATABASE_URL` (or `POSTGRES_URL`) | catalog Postgres reachable |
+
+After adding any of these, re-create the backend (`up -d --force-recreate
+backend`) and confirm via `printenv` + a request to the feature's endpoint.
 
 ### Scenario 3 — Change a frontend `NEXT_PUBLIC_*` var
 

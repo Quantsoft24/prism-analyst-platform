@@ -11,6 +11,7 @@ import ChatLayout from "./components/ChatLayout";
 import CompaniesView from "../companies/components/CompaniesView";
 import BMCView from "../bmc/components/BMCView";
 import NewsView from "../news/components/NewsView";
+import StockDashboardView from "../stocks/components/StockDashboardView";
 import DashboardView from "../dashboard/components/DashboardView";
 import ReportsView from "../reports/components/ReportsView";
 import SettingsView from "../settings/components/SettingsView";
@@ -124,6 +125,9 @@ export default function ChatPage() {
 
       case "news":
         return <NewsView onAsk={handleQuickPrompt} />;
+
+      case "stocks":
+        return <StockDashboardView onAsk={handleQuickPrompt} />;
 
       case "reports":
         return <ReportsView onReportClick={handleReportClick} />;

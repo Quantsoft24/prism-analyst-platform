@@ -11,20 +11,18 @@ interface WatchlistPulseProps {
   watchlist: string[];
   hours: number;
   onRemove: (company: string) => void;
-  onInvestigate: (company: string) => void;
 }
 
 /**
- * Watchlist Pulse — one card per watched company showing its live news verdict
- * + breakdown bar + a one-click investigation. Each card owns its own summary
- * query (React Query hooks can't loop), so adding a name fires one request and
- * cards refresh independently on the 5-min cadence. CSS Modules.
+ * Watchlist Pulse — one compact card per watched company showing its live news
+ * verdict + breakdown bar. Each card owns its own summary query (React Query
+ * hooks can't loop), so adding a name fires one request and cards refresh
+ * independently on the 5-min cadence. CSS Modules.
  */
 export default function WatchlistPulse({
   watchlist,
   hours,
   onRemove,
-  onInvestigate,
 }: WatchlistPulseProps) {
   // Parent only renders this when the watchlist is non-empty (it's the
   // per-company sentiment dashboard above the feed). Empty-state + company
@@ -39,7 +37,6 @@ export default function WatchlistPulse({
           company={company}
           hours={hours}
           onRemove={() => onRemove(company)}
-          onInvestigate={() => onInvestigate(company)}
         />
       ))}
     </div>
@@ -56,19 +53,17 @@ function WatchlistCard({
   company,
   hours,
   onRemove,
-  onInvestigate,
 }: {
   company: string;
   hours: number;
   onRemove: () => void;
-  onInvestigate: () => void;
 }) {
   const { data, isLoading, isError } = useCompanySummary(company, hours);
 
   return (
     <div className={styles.watchCard}>
       <button className={styles.watchRemove} onClick={onRemove} aria-label={`Remove ${company}`}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
         </svg>
       </button>
@@ -78,7 +73,7 @@ function WatchlistCard({
       {isLoading && <div className={styles.watchNote}>Scoring latest news…</div>}
 
       {isError && (
-        <div className={styles.watchNote}>Sentiment unavailable right now — refreshes automatically.</div>
+        <div className={styles.watchNote}>Sentiment unavailable — refreshes automatically.</div>
       )}
 
       {data && !isLoading && (
@@ -98,9 +93,6 @@ function WatchlistCard({
                 </span>
               )}
             </div>
-            <button className={styles.investigateBtn} onClick={onInvestigate}>
-              Why is it moving?
-            </button>
           </>
         )
       )}

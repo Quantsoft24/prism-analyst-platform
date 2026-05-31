@@ -15,7 +15,6 @@ import {
 import { useWatchlist } from "@/hooks/useWatchlist";
 import { cn } from "@/lib/utils";
 
-import InvestigationDrawer from "./InvestigationDrawer";
 import NewsFeed from "./NewsFeed";
 import WatchlistPulse from "./WatchlistPulse";
 import styles from "./news.module.css";
@@ -68,13 +67,13 @@ interface NewsViewProps {
 /**
  * News & Sentiment — PRISM's market-intelligence surface.
  *
- * Layout (feed-first): status header → Today's Pulse → a company chips bar
- * (track / remove / quick-pick) → a two-column grid. The feed is primary — all
- * news by default, scoped to tracked companies' news when any are tracked; the
- * per-company sentiment dashboard shows above the feed only when tracking. The
- * right rail holds trending + sectors + sources. The Investigation drawer is
- * the agentic differentiator — "why is X moving?" runs a live agent analysis
- * inline. Auto-refreshes on the 5-min cadence via React Query.
+ * Layout (feed-first): a sticky toolbar (track box + quick-add suggestions +
+ * time window) → tracked-company chips → a two-column grid. The feed is primary
+ * — all news by default, scoped to tracked companies' news when any are tracked;
+ * the per-company sentiment dashboard shows above the feed only when tracking.
+ * The right rail holds trending + sectors + sources. Auto-refreshes on the
+ * 5-min cadence via React Query (and on window focus, so returning to the tab
+ * shows fresh data).
  *
  * Styling: CSS Modules (news.module.css) + Lakshya design tokens — matches the
  * codebase convention (no inline styles, no utility classes). Mobile-first;
@@ -84,11 +83,37 @@ export default function NewsView({ onAsk }: NewsViewProps) {
   const [hours, setHours] = React.useState(24);
   const [sector, setSector] = React.useState<SectorCode | undefined>(undefined);
   const [companyFilter, setCompanyFilter] = React.useState<string | undefined>(undefined);
-  const [investigate, setInvestigate] = React.useState<string | null>(null);
   const [addInput, setAddInput] = React.useState("");
   // Sub-filter focus: a subset of tracked companies to scope the feed to
   // (server-side, so alias resolution handles "TCS" → "Tata Consultancy…").
   const [focus, setFocus] = React.useState<string[]>([]);
+
+  // Measure two things and expose them as CSS vars on the page:
+  //  --news-header-h  : the sticky toolbar's exact height, so elements that pin
+  //                     below it (feed header, rail) sit flush at its bottom
+  //                     edge — no gap (content peeking through), no overlap.
+  //  --news-viewport-h: the scroll container's (.content) visible height, which
+  //                     is shorter than the window (the global Topbar sits above
+  //                     it). The rail is sized to THIS so it never overhangs the
+  //                     fold — otherwise "Trending now" gets pushed out of view
+  //                     when you reach the bottom of the feed.
+  const pageRef = React.useRef<HTMLDivElement>(null);
+  const headerRef = React.useRef<HTMLElement>(null);
+  React.useLayoutEffect(() => {
+    const page = pageRef.current;
+    const header = headerRef.current;
+    if (!page || !header) return;
+    const scroller = page.parentElement; // AppShell's .content (scroll container)
+    const apply = () => {
+      page.style.setProperty("--news-header-h", `${header.offsetHeight}px`);
+      if (scroller) page.style.setProperty("--news-viewport-h", `${scroller.clientHeight}px`);
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(header);
+    if (scroller) ro.observe(scroller);
+    return () => ro.disconnect();
+  }, []);
 
   const watchlist = useWatchlist();
   const trending = useNewsTrending(hours, 12);
@@ -137,43 +162,61 @@ export default function NewsView({ onAsk }: NewsViewProps) {
         : "Latest headlines";
 
   const live = !trending.isError && !sources.isError;
-  // Source count comes from /sources (which we already fetch) — the old /stats
-  // call returned a shape without it, so the count was always blank.
-  const sourceCount =
-    typeof sources.data?.total_sources === "number"
-      ? sources.data.total_sources
-      : sources.data?.sources?.length;
+
+  // Quick-add suggestions (untracked names) — surfaced inline in the toolbar to
+  // use the space between the track box and the time-window pills.
+  const suggestions = QUICK_PICKS.filter((p) => !watchlist.watchlist.includes(p)).slice(
+    0,
+    QUICK_PICK_VISIBLE,
+  );
 
   return (
-    <div className={styles.page}>
-      {/* ── Header ── */}
-      <header className={styles.header}>
-        <div>
-          <div className={styles.liveRow}>
-            <span className={cn(styles.liveDot, !live && styles.liveDotOff)} />
-            <span className={styles.eyebrow}>
-              {live ? "Live market intelligence" : "Connecting…"}
-            </span>
+    <div className={styles.page} ref={pageRef}>
+      {/* ── Toolbar (sticky): track box · quick-add suggestions · time window ── */}
+      <header className={styles.header} ref={headerRef}>
+        <div className={styles.headerMain}>
+          <div className={styles.addRow}>
+            <input
+              value={addInput}
+              onChange={(e) => setAddInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddWatch()}
+              placeholder="Track a company…"
+              className={styles.addInput}
+            />
+            <button
+              onClick={handleAddWatch}
+              disabled={!addInput.trim() || watchlist.isFull}
+              className={styles.trackBtn}
+            >
+              Track
+            </button>
           </div>
-          <h1 className={styles.title}>News &amp; Sentiment</h1>
-          <p className={styles.subtitle}>
-            Live Indian-market headlines with AI sentiment
-            {sourceCount ? ` · ${sourceCount.toLocaleString()} sources` : ""}
-          </p>
-          <LiveStatus updatedAt={trending.dataUpdatedAt} isFetching={trending.isFetching} />
+
+          {/* Quick-add suggestions fill the middle space */}
+          {suggestions.length > 0 && (
+            <div className={styles.suggestStrip}>
+              {suggestions.map((c) => (
+                <button key={c} className={styles.chip} onClick={() => watchlist.add(c)}>
+                  + {c}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className={styles.windowSelector}>
+            {HOURS_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                onClick={() => setHours(o.value)}
+                className={cn(styles.windowBtn, hours === o.value && styles.windowBtnActive)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className={styles.windowSelector}>
-          {HOURS_OPTIONS.map((o) => (
-            <button
-              key={o.value}
-              onClick={() => setHours(o.value)}
-              className={cn(styles.windowBtn, hours === o.value && styles.windowBtnActive)}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
+        <LiveStatus live={live} updatedAt={trending.dataUpdatedAt} isFetching={trending.isFetching} />
       </header>
 
       {/* ── Today's Pulse ── temporarily disabled (see PulseStrip below) ──
@@ -184,14 +227,9 @@ export default function NewsView({ onAsk }: NewsViewProps) {
       />
       */}
 
-      {/* ── Company chips bar — track companies to scope the feed ── */}
+      {/* ── Tracked-company chips (only when tracking) — add box + suggestions live in the toolbar ── */}
       <ChipsBar
         watchlist={watchlist.watchlist}
-        addInput={addInput}
-        isFull={watchlist.isFull}
-        onAddInput={setAddInput}
-        onAdd={handleAddWatch}
-        onPick={watchlist.add}
         onRemove={watchlist.remove}
         onClear={watchlist.clear}
       />
@@ -210,7 +248,6 @@ export default function NewsView({ onAsk }: NewsViewProps) {
                 watchlist={watchlist.watchlist}
                 hours={hours}
                 onRemove={watchlist.remove}
-                onInvestigate={setInvestigate}
               />
             </section>
           )}
@@ -232,7 +269,6 @@ export default function NewsView({ onAsk }: NewsViewProps) {
                 : undefined
             }
             onAsk={handleAskArticle}
-            onInvestigate={setInvestigate}
           />
         </div>
 
@@ -269,15 +305,21 @@ export default function NewsView({ onAsk }: NewsViewProps) {
           <SourcesStrip sources={sources.data} loading={sources.isLoading} />
         </aside>
       </div>
-
-      <InvestigationDrawer company={investigate} onClose={() => setInvestigate(null)} />
     </div>
   );
 }
 
 /* ── Live refresh status — ticks every second off React Query's updatedAt ── */
 
-function LiveStatus({ updatedAt, isFetching }: { updatedAt: number; isFetching: boolean }) {
+function LiveStatus({
+  live,
+  updatedAt,
+  isFetching,
+}: {
+  live: boolean;
+  updatedAt: number;
+  isFetching: boolean;
+}) {
   // Re-render every second so "updated Xs ago / next in Ys" stays live.
   const [, setTick] = React.useState(0);
   React.useEffect(() => {
@@ -285,101 +327,61 @@ function LiveStatus({ updatedAt, isFetching }: { updatedAt: number; isFetching: 
     return () => clearInterval(id);
   }, []);
 
-  if (!updatedAt) return null;
-  const sinceMs = Date.now() - updatedAt;
-  const stale = sinceMs > NEWS_REFRESH_MS * 1.5;
+  const sinceMs = updatedAt ? Date.now() - updatedAt : 0;
+  const stale = !!updatedAt && sinceMs > NEWS_REFRESH_MS * 1.5;
   const nextInSec = Math.max(0, Math.ceil((NEWS_REFRESH_MS - sinceMs) / 1000));
-  const nextLabel =
-    nextInSec >= 60 ? `${Math.ceil(nextInSec / 60)}m` : `${nextInSec}s`;
+  const nextLabel = nextInSec >= 60 ? `${Math.ceil(nextInSec / 60)}m` : `${nextInSec}s`;
+
+  const label = !updatedAt
+    ? live
+      ? "Connecting…"
+      : "Offline"
+    : isFetching
+      ? "Refreshing…"
+      : `Updated ${timeAgoFrom(updatedAt) || "just now"} · next refresh in ${nextLabel}`;
 
   return (
     <div className={cn(styles.liveStatus, stale && styles.stale)}>
-      {isFetching
-        ? "Refreshing…"
-        : `Updated ${timeAgoFrom(updatedAt) || "just now"} · next refresh in ${nextLabel}`}
+      <span className={cn(styles.liveStatusDot, (!live || stale) && styles.liveDotOff)} />
+      {label}
     </div>
   );
 }
 
-/* ── Company chips bar — track / remove / quick-pick companies ──────────── */
+/* ── Tracked-company chips (removable) — quick-add suggestions live in the
+ *    toolbar; this only renders the names the user is currently tracking. ──── */
 
 function ChipsBar({
   watchlist,
-  addInput,
-  isFull,
-  onAddInput,
-  onAdd,
-  onPick,
   onRemove,
   onClear,
 }: {
   watchlist: string[];
-  addInput: string;
-  isFull: boolean;
-  onAddInput: (v: string) => void;
-  onAdd: () => void;
-  onPick: (c: string) => void;
   onRemove: (c: string) => void;
   onClear: () => void;
 }) {
-  const hasTracked = watchlist.length > 0;
-  // Always surface the next few untracked names from the pool, so suggestions
-  // never run dry as the user keeps adding companies.
-  const picks = QUICK_PICKS.filter((p) => !watchlist.includes(p)).slice(0, QUICK_PICK_VISIBLE);
+  if (watchlist.length === 0) return null;
 
   return (
     <section className={styles.chipsBar}>
-      <div className={styles.addRow}>
-        <input
-          value={addInput}
-          onChange={(e) => onAddInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && onAdd()}
-          placeholder="Track a company…"
-          className={styles.addInput}
-        />
-        <button
-          onClick={onAdd}
-          disabled={!addInput.trim() || isFull}
-          className={styles.trackBtn}
-        >
-          Track
+      <div className={styles.chips}>
+        <span className={styles.quickPickLabel}>Tracking:</span>
+        {watchlist.map((c) => (
+          <span key={c} className={cn(styles.chip, styles.chipActive)}>
+            {c}
+            <button
+              className={styles.chipRemove}
+              title={`Stop tracking ${c}`}
+              onClick={() => onRemove(c)}
+            >
+              ✕
+            </button>
+          </span>
+        ))}
+        <button className={styles.clearChip} onClick={onClear}>
+          Clear all
         </button>
       </div>
-
-      {/* Tracked companies (removable) */}
-      {hasTracked && (
-        <div className={styles.chips}>
-          {watchlist.map((c) => (
-            <span key={c} className={cn(styles.chip, styles.chipActive)}>
-              {c}
-              <button
-                className={styles.chipRemove}
-                title={`Stop tracking ${c}`}
-                onClick={() => onRemove(c)}
-              >
-                ✕
-              </button>
-            </span>
-          ))}
-          <button className={styles.clearChip} onClick={onClear}>
-            Clear all
-          </button>
-        </div>
-      )}
-
-      {/* Suggestions — always shown while the pool has untracked names */}
-      {picks.length > 0 && (
-        <div className={styles.chips}>
-          <span className={styles.quickPickLabel}>
-            {hasTracked ? "Add more:" : "Suggestions:"}
-          </span>
-          {picks.map((c) => (
-            <button key={c} className={styles.chip} onClick={() => onPick(c)}>
-              + {c}
-            </button>
-          ))}
-        </div>
-      )}
     </section>
   );
 }

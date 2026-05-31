@@ -9,24 +9,41 @@
 
 /* ── Page shell ──────────────────────────────────────────────────────────── */
 .page {
+  /* Sticky-offset for elements that pin below the toolbar (feed header, rail).
+     Mirrors the toolbar's pinned height; tuned per breakpoint since the toolbar
+     wraps on small screens. */
+  --news-header-h: 150px;
+
   width: 100%;
   max-width: 1440px;
   margin: 0 auto;
   padding: 20px 16px;
 }
-@media (min-width: 640px) { .page { padding: 24px; } }
-@media (min-width: 1024px) { .page { padding: 32px; } }
+@media (min-width: 640px) { .page { padding: 24px; --news-header-h: 92px; } }
+@media (min-width: 1024px) { .page { padding: 32px; --news-header-h: 96px; } }
 
-/* ── Header ──────────────────────────────────────────────────────────────── */
+/* ── Toolbar header (sticky) ─────────────────────────────────────────────── */
 .header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+/* Main controls row: track box · suggestions · time window — vertically
+   centred so the track box lines up with the time-window pills. */
+.headerMain {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--line);
 }
 @media (min-width: 640px) {
-  .header { flex-direction: row; align-items: center; justify-content: space-between; }
+  .headerMain { flex-direction: row; align-items: center; gap: 16px; }
 }
 
 .liveRow { display: flex; align-items: center; gap: 10px; }
@@ -48,9 +65,19 @@
 @media (min-width: 640px) { .title { font-size: 26px; } }
 .subtitle { margin-top: 6px; font-size: 13px; color: var(--ink-mute); }
 
+/* Quick-add suggestions — single-line strip that fills the toolbar's middle.
+   Scrolls horizontally if the names overflow, so the toolbar stays one row. */
+.suggestStrip {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  overflow-x: auto; scrollbar-width: none;
+}
+.suggestStrip::-webkit-scrollbar { display: none; }
+.suggestStrip > * { flex-shrink: 0; }
+@media (min-width: 640px) { .suggestStrip { flex: 1; } }
+
 /* Time-window selector */
 .windowSelector {
-  display: inline-flex; align-self: flex-start; flex-shrink: 0; gap: 4px;
+  display: inline-flex; flex-shrink: 0; gap: 4px;
   padding: 4px; border: 1px solid var(--line); border-radius: 999px;
   background: var(--bg-elev); box-shadow: var(--shadow-sm);
 }
@@ -106,6 +133,32 @@
 .colMain { display: flex; flex-direction: column; gap: 40px; min-width: 0; }
 .colRail { display: flex; flex-direction: column; gap: 40px; min-width: 0; }
 
+/* Desktop: pin the rail (Trending / Sectors / Sources) so it stays in view as
+   the feed scrolls. It scrolls internally if taller than the viewport. */
+@media (min-width: 1024px) {
+  .colRail {
+    position: sticky;
+    top: calc(var(--news-header-h) + 16px);
+    align-self: start;
+    /* Sized to the real scroll-viewport height (set in JS), minus the toolbar
+       offset and the page's bottom padding, so the rail fits entirely on screen
+       and stays pinned even at the bottom of the feed (Trending never hides).
+       Falls back to 100dvh before the measurement lands. */
+    max-height: calc(var(--news-viewport-h, 100dvh) - var(--news-header-h) - 48px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  /* Keep each rail section's title pinned while its content scrolls inside the
+     rail (so "Trending now" stays visible, only the list moves). */
+  .colRail .sectionTitle {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding-bottom: 8px;
+    background: var(--bg);
+  }
+}
+
 .section { display: flex; flex-direction: column; gap: 14px; }
 .sectionHead {
   display: flex; flex-wrap: wrap; align-items: center;
@@ -117,7 +170,7 @@
 }
 
 /* ── Add-to-watchlist row ────────────────────────────────────────────────── */
-.addRow { display: flex; align-items: center; gap: 8px; }
+.addRow { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .addInput {
   width: 160px; padding: 8px 12px;
   border: 1px solid var(--line); border-radius: var(--radius-md);
@@ -144,10 +197,10 @@
 
 /* ── Watchlist cards (compact sentiment dashboard) ───────────────────────── */
 .watchGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-@media (min-width: 640px) { .watchGrid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); } }
+@media (min-width: 640px) { .watchGrid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); } }
 .watchCard {
   position: relative;
-  padding: 12px;
+  padding: 10px 12px;
   border: 1px solid var(--line); border-radius: var(--radius-lg);
   background: var(--bg-elev); box-shadow: var(--shadow-sm);
   transition: box-shadow var(--transition-normal);
@@ -163,23 +216,16 @@
   padding-right: 20px; font-size: 13px; font-weight: 600; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.verdict { margin-top: 6px; font-size: 15px; font-weight: 600; }
+.verdict { margin-top: 4px; font-size: 14px; font-weight: 600; }
 .watchMeta {
   margin-top: 6px; display: flex; align-items: center; justify-content: space-between;
   font-size: 10px; color: var(--ink-mute);
 }
 .heuristic { color: var(--warn); }
-.investigateBtn {
-  margin-top: 8px; width: 100%; padding: 6px 0;
-  border: 1px solid var(--line); border-radius: var(--radius-md);
-  font-size: 11px; font-weight: 500; color: var(--ink-soft);
-  transition: color var(--transition-fast), border-color var(--transition-fast);
-}
-.investigateBtn:hover { color: var(--accent); border-color: var(--accent); }
-.watchNote { margin-top: 8px; font-size: 11px; color: var(--ink-mute); }
+.watchNote { margin-top: 6px; font-size: 11px; color: var(--ink-mute); }
 
 /* Sentiment breakdown bar */
-.bar { margin-top: 8px; }
+.bar { margin-top: 6px; }
 .barTrack {
   display: flex; height: 8px; width: 100%; overflow: hidden;
   border-radius: 999px; background: var(--bg-sunken);
@@ -195,9 +241,17 @@
 .legendDot { width: 6px; height: 6px; border-radius: 999px; }
 
 /* ── Feed ────────────────────────────────────────────────────────────────── */
+/* The feed header (title + company/sentiment filters) pins just below the
+   toolbar once the user scrolls past the tracked-sentiment cards, so the
+   filters never scroll out of reach while reading articles. */
 .feedHeader {
+  position: sticky;
+  top: var(--news-header-h);
+  z-index: 20;
+  background: var(--bg);
   display: flex; flex-wrap: wrap; align-items: center;
   justify-content: space-between; gap: 8px 16px;
+  padding: 10px 0;
 }
 .feedHeaderLeft { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .feedMeta { font-size: 12px; color: var(--ink-mute); }
@@ -320,12 +374,17 @@
 .railSkeletonRow { height: 52px; border-bottom: 1px solid var(--line-soft); background: var(--bg-sunken); animation: shimmer 1.4s ease-in-out infinite; }
 .railSkeletonRow:last-child { border-bottom: none; }
 
-/* ── Live refresh status (header) ────────────────────────────────────────── */
+/* ── Live refresh status (toolbar) ───────────────────────────────────────── */
 .liveStatus {
-  margin-top: 8px; font-size: 11px; font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; align-self: flex-end; gap: 6px;
+  font-size: 11px; font-variant-numeric: tabular-nums;
   color: var(--ink-faint); letter-spacing: 0.01em;
 }
 .liveStatus.stale { color: var(--warn); }
+.liveStatusDot {
+  width: 7px; height: 7px; flex-shrink: 0; border-radius: 999px;
+  background: var(--pos); animation: pulse 2s ease-in-out infinite;
+}
 
 /* ── Feed: sentiment filter pills ────────────────────────────────────────── */
 .filterPills { display: inline-flex; gap: 4px; }

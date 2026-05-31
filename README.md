@@ -18,8 +18,9 @@ api.thequantsoft.co.in   → FastAPI backend         (:8000)
 
 All three services run on a single EC2 instance via Docker Compose + Nginx
 reverse proxy. The frontend talks ONLY to PRISM's backend; the backend
-fan-outs to external services (`bmc` on :8012, `stock-chat` on :8011) and a
-shared catalog Postgres.
+fan-outs to external services (`bmc` :8012, `stock-chat` :8011,
+`prism-financials` :8000, `prism-news` :8001), a shared read-only catalog
+Postgres, and a read-only investment RDS (Stock Dashboard data).
 
 ## Tech Stack
 
@@ -27,10 +28,11 @@ shared catalog Postgres.
 |-----------|-------------------------------------------|
 | Frontend  | Next.js 15 (App Router), React 19, TypeScript, CSS Modules |
 | State     | TanStack React Query                      |
-| 3D viz    | `react-force-graph-3d` + `three`          |
+| 3D viz    | `react-force-graph-3d` + `three` (BMC)    |
+| Charts    | `lightweight-charts` (TradingView — Stock Dashboard line/candlestick) |
 | Backend   | FastAPI, Python 3.12, Google ADK 1.33+    |
 | Landing   | Express.js, React (CDN), Vanilla CSS      |
-| Database  | PostgreSQL (primary) + read-only catalog Postgres |
+| Database  | PostgreSQL (primary) + read-only catalog + read-only investment (RDS) |
 | Infra     | Docker, Nginx, GitHub Actions, AWS EC2    |
 
 ## Design System (Lakshya)
@@ -60,6 +62,12 @@ prism-analyst-platform/
 │   │   ├── companies/              Companies catalog view (4,773 entries)
 │   │   ├── bmc/                    Business Model Canvas — 2D grid + 3D explorer
 │   │   │   └── components/         BMCView, BMCBlock, BMCEvidencePanel, BMC3DExplorer
+│   │   ├── news/                   News & Sentiment — feed-first, company chips
+│   │   │   └── components/         NewsView, NewsFeed, WatchlistPulse, InvestigationDrawer
+│   │   ├── stocks/                 Stock Dashboard — search + price chart + financials
+│   │   │   └── components/         StockDashboardView, SecuritySearch, PriceChart,
+│   │   │                          MetricDropdown, LatestStrip, AnnualFinancials,
+│   │   │                          BalanceSheetTable
 │   │   ├── reports/                Reports Library
 │   │   └── settings/               Settings — incl. Tools & Capabilities (real registry)
 │   ├── components/                 AppShell, Sidebar, Topbar, Toast, SearchModal
@@ -69,6 +77,9 @@ prism-analyst-platform/
 │   │   │   ├── client.ts           Base fetch wrapper (X-Dev-Firm header)
 │   │   │   ├── bmc.ts              BMC types + hooks (proxied via PRISM)
 │   │   │   ├── companies.ts        Companies catalog hooks
+│   │   │   ├── news.ts             News & sentiment hooks (proxied via PRISM)
+│   │   │   ├── stocks.ts           Stock Dashboard hooks (securities, prices,
+│   │   │   │                       balance-sheet) + in-memory search + formatters
 │   │   │   ├── chat.ts             Chat SSE stream client
 │   │   │   └── integrations.ts     Settings → Tools & Capabilities
 │   │   ├── config.ts               Reads NEXT_PUBLIC_API_URL (build-time!)
@@ -122,6 +133,8 @@ Open <http://localhost:4000>.
 | **Chat**       | Ask screen → live agent stream via SSE. Tool-call timeline shows each `stock_filings_*` / `bmc_*` / `financials_query` call. Markdown rendering, inline citation popovers, copy-to-clipboard, and a stop+retry control. `@bmc <name>` routes to the BMC view. |
 | **BMC**        | 9-block Business Model Canvas in a 2D grid (primary) + a 3D explorer toggle (energy-core force graph). Click any `[n]` citation marker → side panel with the cited filing excerpt + drill-down chat. PDF / JSON export. Proxied to the external `bmc` service. |
 | **Companies** | Paginated list of the 4,773-row Indian markets catalog (search by name/code, filter by industry). Backed by the catalog Postgres read-only. |
+| **News & Sentiment** | Feed-first market-intelligence surface — all headlines by default; a company chips bar (track / remove / quick-pick) scopes the feed to tracked names with per-company sentiment cards + an inline "why is X moving?" investigation drawer. 20/page numbered pagination. Proxied to the external `prism-news` service. |
+| **Stock Dashboard** | Search any NSE/BSE security → **Overview** section (interactive price chart: metric dropdown line↔candlestick, range filter 5D–MAX, crosshair tooltip, latest-values strip) and a stacked **Annual Financials** section (10-year Balance Sheet tree, standalone/consolidated toggle, Value/YoY%/common-size views, per-row "Ask PRISM"). Direct reads of the investment RDS via `/api/v1/stocks/*`. Income Statement + Cash Flow tabs present but disabled. |
 | **Dashboard**  | Hero greeting, watchlist sparklines, activity feed (currently mock — wires to real telemetry in a later slice). |
 | **Reports**    | Reports Library with category filters (mock scaffold for now). |
 | **Settings**   | 10 sections incl. **Tools & Capabilities** — lists registered integrations from `GET /api/v1/integrations` (`stock-chat · 3 tools`, `bmc · 6 tools`, `prism-financials · 1 tool`) with per-firm enable/disable toggles. |

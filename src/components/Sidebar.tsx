@@ -52,6 +52,15 @@ const icons: Record<string, React.ReactNode> = {
       <path d="M10 6h8v4h-8V6z" />
     </svg>
   ),
+  stocks: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 3v18h18" />
+      <rect x="7" y="10" width="3" height="6" />
+      <path d="M8.5 10V7.5M8.5 16v2.5" />
+      <rect x="14" y="7" width="3" height="8" />
+      <path d="M15.5 7V4.5M15.5 15v2.5" />
+    </svg>
+  ),
   reports: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -211,6 +220,10 @@ export default function Sidebar({
           </button>
         </Tooltip>
 
+        {/* Scrollable middle — Workspace nav + Recent. Scrolls internally so
+            the brand (top) and user/footer (bottom) stay pinned regardless of
+            how many nav or recent items there are. */}
+        <div className={styles.scrollArea}>
         {/* Workspace Nav */}
         {!collapsed && <div className={styles.navSection}>Workspace</div>}
         {NAV_ITEMS.map((item) => (
@@ -262,6 +275,7 @@ export default function Sidebar({
             ))}
           </>
         )}
+        </div>
 
         {/* Footer */}
         <div

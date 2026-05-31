@@ -7,10 +7,12 @@
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  padding: 18px 14px;
+  padding: 16px 14px;
   gap: 4px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  /* The shell itself never scrolls — only the middle .scrollArea does. This
+     keeps the brand + New Research pinned at the top and the user/footer
+     pinned at the bottom, however many nav / recent items there are. */
+  overflow: hidden;
   height: 100vh;
   height: 100dvh;
   width: var(--sidebar-width, 240px);
@@ -18,6 +20,33 @@
     width 200ms ease,
     padding 200ms ease;
 }
+
+/* Scrollable middle: Workspace nav + Recent. Flexes to fill the space between
+   the pinned top and footer, scrolling internally when content overflows. */
+.scrollArea {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* let the scrollbar hug the edge without clipping focus rings */
+  margin: 0 -4px;
+  padding: 0 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+  scrollbar-gutter: stable;
+}
+.scrollArea::-webkit-scrollbar { width: 6px; }
+.scrollArea::-webkit-scrollbar-track { background: transparent; }
+.scrollArea::-webkit-scrollbar-thumb {
+  background: var(--line); border-radius: 999px;
+}
+.scrollArea::-webkit-scrollbar-thumb:hover { background: var(--ink-faint); }
+/* Nothing in the scroll zone should be squished — items keep their height and
+   the zone scrolls instead (prevents flexbox from clipping rows). */
+.scrollArea > * { flex-shrink: 0; }
 
 /* Collapsed = icon-only rail (Claude / VS Code / Notion pattern).
    Width matches AppShell's --shell-sidebar-collapsed-width. */
@@ -28,12 +57,13 @@
 
 /* ── Brand ── */
 .brand {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 8px 18px;
+  padding: 6px 8px 12px;
   border-bottom: 1px solid var(--line-soft);
-  margin-bottom: 14px;
+  margin-bottom: 10px;
   position: relative;
 }
 
@@ -120,6 +150,7 @@
 
 /* ── New Research Button ── */
 .newResearchBtn {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -164,7 +195,7 @@
 
 /* ── Navigation ── */
 .navSection {
-  padding: 12px 8px 6px;
+  padding: 10px 8px 4px;
   font-size: 10px;
   color: var(--ink-mute);
   letter-spacing: 0.12em;
@@ -176,7 +207,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border-radius: var(--radius-md);
   cursor: pointer;
   color: var(--ink-soft);
@@ -247,9 +278,12 @@
 
 /* ── Recent Chats ── */
 .navRecent {
-  font-size: 12px;
-  padding: 6px 10px;
-  color: var(--ink-mute);
+  flex-shrink: 0; /* don't let flexbox squish the row (overflow:hidden would clip text) */
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 7px 10px;
+  color: var(--ink-soft);
   cursor: pointer;
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -265,7 +299,7 @@
 
 /* ── Footer ── */
 .sidebarFooter {
-  margin-top: auto;
+  flex-shrink: 0;
   padding: 12px 8px;
   border-top: 1px solid var(--line-soft);
   display: flex;

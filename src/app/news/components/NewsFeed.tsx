@@ -30,7 +30,6 @@ interface NewsFeedProps {
   /** Shown as a "Clear filter" button when an explicit company/sector filter is active. */
   onClearScope?: () => void;
   onAsk: (article: NewsArticle) => void;
-  onInvestigate: (company: string) => void;
 }
 
 type SentimentFilter = "all" | SentimentLabel;
@@ -41,7 +40,7 @@ type SentimentFilter = "all" | SentimentLabel;
  * sub-filter re-scopes the feed server-side (so alias resolution works and
  * pagination stays correct); the sentiment pills narrow the current page.
  * Article cards show a sentiment chip, source, time-ago, sector, and a 1-line
- * description preview, with "Ask PRISM" / "Why is it moving?" actions.
+ * description preview, with an "Ask PRISM" action.
  */
 export default function NewsFeed({
   title,
@@ -53,7 +52,6 @@ export default function NewsFeed({
   onSubFilterChange,
   onClearScope,
   onAsk,
-  onInvestigate,
 }: NewsFeedProps) {
   const [page, setPage] = React.useState(1);
   const [sentiment, setSentiment] = React.useState<SentimentFilter>("all");
@@ -87,6 +85,25 @@ export default function NewsFeed({
   const meta = data?.meta;
   const totalPages = meta?.total_pages ?? 1;
   const total = meta?.total_results ?? 0;
+
+  // Show the skeleton (not stale data) while the feed *scope* changes — the
+  // company sub-filter, sector, or window. Page changes still use
+  // keepPreviousData for flicker-free pagination. Without this, switching the
+  // sub-filter briefly shows the previous company's articles, which is
+  // confusing.
+  const scopeKey = `${company ?? ""}|${sector ?? ""}|${hours}`;
+  const [scopeLoading, setScopeLoading] = React.useState(false);
+  const prevScopeKey = React.useRef(scopeKey);
+  React.useEffect(() => {
+    if (prevScopeKey.current !== scopeKey) {
+      prevScopeKey.current = scopeKey;
+      setScopeLoading(true);
+    }
+  }, [scopeKey]);
+  React.useEffect(() => {
+    if (scopeLoading && !isFetching) setScopeLoading(false);
+  }, [scopeLoading, isFetching]);
+  const showSkeleton = isLoading || scopeLoading;
 
   // The company sub-filter re-scopes the feed server-side (via the parent), so
   // here we only narrow the current page by sentiment. Sentiment is populated
@@ -179,14 +196,14 @@ export default function NewsFeed({
       </div>
 
       {/* meta line */}
-      {meta && !isLoading && (
+      {meta && !showSkeleton && (
         <span className={styles.feedMeta}>
           {total.toLocaleString()} headlines in the last {hours}h
           {isFetching && isPlaceholderData ? " · loading page…" : isFetching ? " · refreshing…" : ""}
         </span>
       )}
 
-      {isLoading && (
+      {showSkeleton && (
         <div className={styles.skeletonList}>
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className={styles.skeletonRow} />
@@ -201,7 +218,7 @@ export default function NewsFeed({
         </div>
       )}
 
-      {!isLoading && !isError && articles.length === 0 && (
+      {!showSkeleton && !isError && articles.length === 0 && (
         <div className={styles.empty}>
           <div className={styles.emptyTitle}>
             {pageArticles.length > 0 ? "No matching headlines" : "No headlines found"}
@@ -214,21 +231,16 @@ export default function NewsFeed({
         </div>
       )}
 
-      {articles.length > 0 && (
+      {!showSkeleton && articles.length > 0 && (
         <div className={styles.feedList}>
           {articles.map((a, i) => (
-            <ArticleRow
-              key={`${a.link}-${i}`}
-              article={a}
-              onAsk={() => onAsk(a)}
-              onInvestigate={onInvestigate}
-            />
+            <ArticleRow key={`${a.link}-${i}`} article={a} onAsk={() => onAsk(a)} />
           ))}
         </div>
       )}
 
       {/* Numbered pagination */}
-      {!isLoading && !isError && totalPages > 1 && (
+      {!showSkeleton && !isError && totalPages > 1 && (
         <Pager page={page} totalPages={totalPages} disabled={isFetching} onGo={setPage} />
       )}
     </div>
@@ -292,11 +304,9 @@ function scoreClass(label?: string): string {
 function ArticleRow({
   article,
   onAsk,
-  onInvestigate,
 }: {
   article: NewsArticle;
   onAsk: () => void;
-  onInvestigate: (company: string) => void;
 }) {
   const primaryCompany = article.companies?.[0];
   const showDesc =
@@ -334,11 +344,6 @@ function ArticleRow({
           <button className={styles.actionBtn} onClick={onAsk}>
             Ask PRISM
           </button>
-          {primaryCompany && (
-            <button className={styles.actionBtn} onClick={() => onInvestigate(primaryCompany)}>
-              Why is it moving?
-            </button>
-          )}
         </div>
       </div>
     </div>
