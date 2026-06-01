@@ -13,7 +13,7 @@ export const MOCK_USER = {
 };
 
 /* ── Navigation ── */
-export type NavView = "dashboard" | "chat" | "companies" | "bmc" | "news" | "reports" | "settings";
+export type NavView = "dashboard" | "chat" | "companies" | "bmc" | "news" | "stocks" | "reports" | "settings";
 
 export interface NavItem {
   id: NavView;
@@ -28,6 +28,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "companies", label: "Companies", icon: "companies" },
   { id: "bmc", label: "Business Models", icon: "bmc" },
   { id: "news", label: "News & Sentiment", icon: "news" },
+  { id: "stocks", label: "Stock Dashboard", icon: "stocks" },
   { id: "reports", label: "Reports Library", icon: "reports" },
   { id: "settings", label: "Settings", icon: "settings" },
 ];
@@ -38,6 +39,17 @@ export const RECENT_CHATS = [
   { id: "hdfc", label: "HDFC AMC scenarios" },
   { id: "adani", label: "Adani Ports filings" },
   { id: "tata", label: "Tata Motors DCF" },
+  { id: "sbi", label: "SBI asset quality" },
+  { id: "itc", label: "ITC demerger impact" },
+  { id: "infy", label: "Infosys deal wins" },
+  { id: "maruti", label: "Maruti volume trends" },
+  { id: "bajaj", label: "Bajaj Finance AUM" },
+  { id: "ltim", label: "LTIMindtree margins" },
+  { id: "sunpharma", label: "Sun Pharma US pipeline" },
+  { id: "dmart", label: "DMart store economics" },
+  { id: "zomato", label: "Zomato unit economics" },
+  { id: "ntpc", label: "NTPC capex plan" },
+  { id: "airtel", label: "Airtel ARPU trend" },
 ];
 
 /* ── Watchlist ── */
@@ -278,4 +290,15 @@ export const RECENT_CHAT_QUERIES: Record<string, string> = {
   hdfc: "Build scenarios for HDFC AMC",
   adani: "Show mutual fund holdings of Adani Ports over last 4 quarters",
   tata: "Build a DCF for Tata Motors with bull/base/bear scenarios",
+  sbi: "Analyse SBI's asset quality and NIM trend over the last 8 quarters",
+  itc: "What's the impact of the ITC hotels demerger on valuation?",
+  infy: "Summarise Infosys large-deal TCV and FY26 guidance",
+  maruti: "Break down Maruti Suzuki volume and realisation trends",
+  bajaj: "Track Bajaj Finance AUM growth and credit costs",
+  ltim: "Why are LTIMindtree operating margins compressing?",
+  sunpharma: "Review Sun Pharma's US specialty pipeline and key risks",
+  dmart: "Explain DMart store-level economics and same-store sales growth",
+  zomato: "Assess Zomato's unit economics and path to profitability",
+  ntpc: "Evaluate NTPC's renewable capex plan and funding mix",
+  airtel: "Trend Bharti Airtel ARPU and subscriber additions",
 };

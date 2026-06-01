@@ -7,8 +7,9 @@
 ## Stack at a glance
 
 Next.js 15 (App Router) · React 19 · TypeScript · CSS Modules · TanStack Query
-· `react-force-graph-3d` + `three` (BMC 3D explorer) · Express landing page
-(separate container). Deployed via Docker Compose on EC2 alongside the backend.
+· `react-force-graph-3d` + `three` (BMC 3D explorer) · `lightweight-charts`
+(Stock Dashboard line/candlestick) · Express landing page (separate container).
+Deployed via Docker Compose on EC2 alongside the backend.
 
 ## Knowledge graph first
 
@@ -91,6 +92,9 @@ Current expected counts (matching backend):
 - `bmc · 6 tools`
 - `prism-financials · 1 tool` ← added 2026-05-27; if your backend session
   shows fewer, the prod env var `PRISM_FINANCIALS_URL` may be unset.
+- `prism-news · 4 tools` (news_sentiment / news_trending / news_search /
+  news_compare). The Stock Dashboard's investment-DB data is a UI feature with
+  NO agent tool, so it does not appear here.
 
 ## Keyboard shortcuts
 
@@ -105,11 +109,43 @@ Current expected counts (matching backend):
 | ⌘4 | Settings |
 | Esc | Close modal |
 
-## Recent UX additions to know about
+## Views beyond chat (each a component in the `/chat` AppShell view-switcher)
+
+`NavView` (`src/lib/mockData.ts`) + the `renderView()` switch in
+`src/app/chat/page.tsx` host every feature. To add a view: extend `NavView`,
+add a `NAV_ITEMS` entry + a `Sidebar.tsx` icon + a `Topbar.tsx` label + a
+`renderView` case. Live views: Dashboard, Chat, Companies, BMC,
+**News & Sentiment**, **Stock Dashboard**, Reports, Settings.
+
+- **News & Sentiment** (`src/app/news/`) — feed-first; `news.ts` hooks proxy to
+  `/api/v1/news/*`. Company tracking via a localStorage watchlist
+  (`useWatchlist`); the company sub-filter re-scopes the feed server-side.
+- **Stock Dashboard** (`src/app/stocks/`) — `stocks.ts` hooks hit
+  `/api/v1/stocks/*` (direct investment-DB reads). Two stacked sections:
+  Overview (price chart) + Annual Financials (Balance Sheet tree; Income
+  Statement / Cash Flow disabled — no data yet). Per-row **Ask PRISM** routes
+  into chat via the `onAsk` prop (mirrors NewsView). Search is **instant
+  in-memory**: `useSecurities()` fetches all ~8,230 securities ONCE (cached),
+  then `searchSecurities()` filters client-side — no per-keystroke API.
+
+## Two gotchas the Stock Dashboard / sidebar hit
+
+- **`lightweight-charts` is client-only** — load `PriceChart` via
+  `next/dynamic({ ssr: false })` (it touches the DOM). It reads Lakshya tokens
+  via `getComputedStyle` and recreates on theme change. v5 API:
+  `chart.addSeries(LineSeries | AreaSeries | CandlestickSeries, …)`. Pin colours
+  from CSS vars; don't hardcode.
+- **Flex + `overflow: hidden` clips children.** The sidebar scroll zone
+  (`.scrollArea`) and any flex column with overflow-hidden rows must set
+  `flex-shrink: 0` on the rows, or flexbox squishes them below content height
+  and clips the text. (Fixed in `Sidebar.module.css`.)
+
+## Other recent UX to know about
 
 - **Collapsible icon-rail sidebar** with ⌘B + localStorage persistence
-  (`prism.sidebar.collapsed`). Custom `Tooltip` primitive for collapsed-mode
-  labels.
+  (`prism.sidebar.collapsed`). Three-zone layout: pinned brand + New Research,
+  a scrollable middle (`.scrollArea` — nav + recent), pinned user/footer. Custom
+  `Tooltip` primitive for collapsed-mode labels.
 - **Markdown rendering** in the chat thread + citation popovers + copy button.
 - **Tool-call timeline** in the right pane (Tools tab). Each `stock_filings_*`
   / `bmc_*` / `financials_query` call gets a card with status + retry chip.
