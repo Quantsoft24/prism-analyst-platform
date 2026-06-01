@@ -9,24 +9,41 @@
 
 /* ── Page shell ──────────────────────────────────────────────────────────── */
 .page {
+  /* Sticky-offset for elements that pin below the toolbar (feed header, rail).
+     Mirrors the toolbar's pinned height; tuned per breakpoint since the toolbar
+     wraps on small screens. */
+  --news-header-h: 150px;
+
   width: 100%;
   max-width: 1440px;
   margin: 0 auto;
   padding: 20px 16px;
 }
-@media (min-width: 640px) { .page { padding: 24px; } }
-@media (min-width: 1024px) { .page { padding: 32px; } }
+@media (min-width: 640px) { .page { padding: 24px; --news-header-h: 92px; } }
+@media (min-width: 1024px) { .page { padding: 32px; --news-header-h: 96px; } }
 
-/* ── Header ──────────────────────────────────────────────────────────────── */
+/* ── Toolbar header (sticky) ─────────────────────────────────────────────── */
 .header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--bg);
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding-bottom: 24px;
+  gap: 8px;
+  padding-top: 14px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--line);
 }
+/* Main controls row: track box · suggestions · time window — vertically
+   centred so the track box lines up with the time-window pills. */
+.headerMain {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 @media (min-width: 640px) {
-  .header { flex-direction: row; align-items: flex-end; justify-content: space-between; }
+  .headerMain { flex-direction: row; align-items: center; gap: 16px; }
 }
 
 .liveRow { display: flex; align-items: center; gap: 10px; }
@@ -40,17 +57,27 @@
   text-transform: uppercase; color: var(--ink-mute);
 }
 .title {
-  margin-top: 8px;
+  margin-top: 6px;
   font-family: var(--font-display);
-  font-size: 28px; line-height: 1.05; letter-spacing: -0.02em;
+  font-size: 22px; line-height: 1.1; letter-spacing: -0.02em;
   color: var(--ink);
 }
-@media (min-width: 640px) { .title { font-size: 34px; } }
-.subtitle { margin-top: 8px; font-size: 14px; color: var(--ink-mute); }
+@media (min-width: 640px) { .title { font-size: 26px; } }
+.subtitle { margin-top: 6px; font-size: 13px; color: var(--ink-mute); }
+
+/* Quick-add suggestions — single-line strip that fills the toolbar's middle.
+   Scrolls horizontally if the names overflow, so the toolbar stays one row. */
+.suggestStrip {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  overflow-x: auto; scrollbar-width: none;
+}
+.suggestStrip::-webkit-scrollbar { display: none; }
+.suggestStrip > * { flex-shrink: 0; }
+@media (min-width: 640px) { .suggestStrip { flex: 1; } }
 
 /* Time-window selector */
 .windowSelector {
-  display: inline-flex; align-self: flex-start; gap: 4px;
+  display: inline-flex; flex-shrink: 0; gap: 4px;
   padding: 4px; border: 1px solid var(--line); border-radius: 999px;
   background: var(--bg-elev); box-shadow: var(--shadow-sm);
 }
@@ -97,7 +124,7 @@
 
 /* ── Main grid ───────────────────────────────────────────────────────────── */
 .grid {
-  margin-top: 36px;
+  margin-top: 28px;
   display: grid; grid-template-columns: 1fr; gap: 40px 32px;
 }
 @media (min-width: 1024px) {
@@ -105,6 +132,32 @@
 }
 .colMain { display: flex; flex-direction: column; gap: 40px; min-width: 0; }
 .colRail { display: flex; flex-direction: column; gap: 40px; min-width: 0; }
+
+/* Desktop: pin the rail (Trending / Sectors / Sources) so it stays in view as
+   the feed scrolls. It scrolls internally if taller than the viewport. */
+@media (min-width: 1024px) {
+  .colRail {
+    position: sticky;
+    top: calc(var(--news-header-h) + 16px);
+    align-self: start;
+    /* Sized to the real scroll-viewport height (set in JS), minus the toolbar
+       offset and the page's bottom padding, so the rail fits entirely on screen
+       and stays pinned even at the bottom of the feed (Trending never hides).
+       Falls back to 100dvh before the measurement lands. */
+    max-height: calc(var(--news-viewport-h, 100dvh) - var(--news-header-h) - 48px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  /* Keep each rail section's title pinned while its content scrolls inside the
+     rail (so "Trending now" stays visible, only the list moves). */
+  .colRail .sectionTitle {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding-bottom: 8px;
+    background: var(--bg);
+  }
+}
 
 .section { display: flex; flex-direction: column; gap: 14px; }
 .sectionHead {
@@ -117,7 +170,7 @@
 }
 
 /* ── Add-to-watchlist row ────────────────────────────────────────────────── */
-.addRow { display: flex; align-items: center; gap: 8px; }
+.addRow { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .addInput {
   width: 160px; padding: 8px 12px;
   border: 1px solid var(--line); border-radius: var(--radius-md);
@@ -142,41 +195,37 @@
 }
 .clearBtn:hover { color: var(--accent); border-color: var(--accent); }
 
-/* ── Watchlist cards ─────────────────────────────────────────────────────── */
-.watchGrid { display: grid; grid-template-columns: 1fr; gap: 12px; }
-@media (min-width: 640px) { .watchGrid { grid-template-columns: repeat(2, 1fr); } }
+/* ── Watchlist cards (compact sentiment dashboard) ───────────────────────── */
+.watchGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (min-width: 640px) { .watchGrid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); } }
 .watchCard {
   position: relative;
-  padding: 16px;
-  border: 1px solid var(--line); border-radius: var(--radius-xl);
+  padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: var(--radius-lg);
   background: var(--bg-elev); box-shadow: var(--shadow-sm);
   transition: box-shadow var(--transition-normal);
 }
 .watchCard:hover { box-shadow: var(--shadow-md); }
 .watchRemove {
-  position: absolute; top: 8px; right: 8px;
-  padding: 4px; border-radius: var(--radius-sm); color: var(--ink-faint);
+  position: absolute; top: 6px; right: 6px;
+  padding: 3px; border-radius: var(--radius-sm); color: var(--ink-faint);
   transition: color var(--transition-fast), background var(--transition-fast);
 }
 .watchRemove:hover { background: var(--bg-sunken); color: var(--ink); }
-.watchName { padding-right: 24px; font-size: 14px; font-weight: 600; color: var(--ink); }
-.verdict { margin-top: 8px; font-size: 18px; font-weight: 600; }
+.watchName {
+  padding-right: 20px; font-size: 13px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.verdict { margin-top: 4px; font-size: 14px; font-weight: 600; }
 .watchMeta {
-  margin-top: 8px; display: flex; align-items: center; justify-content: space-between;
-  font-size: 11px; color: var(--ink-mute);
+  margin-top: 6px; display: flex; align-items: center; justify-content: space-between;
+  font-size: 10px; color: var(--ink-mute);
 }
 .heuristic { color: var(--warn); }
-.investigateBtn {
-  margin-top: 12px; width: 100%; padding: 8px 0;
-  border: 1px solid var(--line); border-radius: var(--radius-md);
-  font-size: 12px; font-weight: 500; color: var(--ink-soft);
-  transition: color var(--transition-fast), border-color var(--transition-fast);
-}
-.investigateBtn:hover { color: var(--accent); border-color: var(--accent); }
-.watchNote { margin-top: 12px; font-size: 12px; color: var(--ink-mute); }
+.watchNote { margin-top: 6px; font-size: 11px; color: var(--ink-mute); }
 
 /* Sentiment breakdown bar */
-.bar { margin-top: 12px; }
+.bar { margin-top: 6px; }
 .barTrack {
   display: flex; height: 8px; width: 100%; overflow: hidden;
   border-radius: 999px; background: var(--bg-sunken);
@@ -192,6 +241,19 @@
 .legendDot { width: 6px; height: 6px; border-radius: 999px; }
 
 /* ── Feed ────────────────────────────────────────────────────────────────── */
+/* The feed header (title + company/sentiment filters) pins just below the
+   toolbar once the user scrolls past the tracked-sentiment cards, so the
+   filters never scroll out of reach while reading articles. */
+.feedHeader {
+  position: sticky;
+  top: var(--news-header-h);
+  z-index: 20;
+  background: var(--bg);
+  display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: space-between; gap: 8px 16px;
+  padding: 10px 0;
+}
+.feedHeaderLeft { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .feedMeta { font-size: 12px; color: var(--ink-mute); }
 .feedList { display: flex; flex-direction: column; gap: 10px; }
 .article {
@@ -312,18 +374,19 @@
 .railSkeletonRow { height: 52px; border-bottom: 1px solid var(--line-soft); background: var(--bg-sunken); animation: shimmer 1.4s ease-in-out infinite; }
 .railSkeletonRow:last-child { border-bottom: none; }
 
-/* ── Live refresh status (header) ────────────────────────────────────────── */
+/* ── Live refresh status (toolbar) ───────────────────────────────────────── */
 .liveStatus {
-  margin-top: 8px; font-size: 11px; font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; align-self: flex-end; gap: 6px;
+  font-size: 11px; font-variant-numeric: tabular-nums;
   color: var(--ink-faint); letter-spacing: 0.01em;
 }
 .liveStatus.stale { color: var(--warn); }
-
-/* ── Feed: top row + sentiment filter pills ──────────────────────────────── */
-.feedTopRow {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-  gap: 8px;
+.liveStatusDot {
+  width: 7px; height: 7px; flex-shrink: 0; border-radius: 999px;
+  background: var(--pos); animation: pulse 2s ease-in-out infinite;
 }
+
+/* ── Feed: sentiment filter pills ────────────────────────────────────────── */
 .filterPills { display: inline-flex; gap: 4px; }
 .filterPill {
   padding: 4px 10px; border-radius: 999px;
@@ -336,24 +399,91 @@
 .filterPillActive.filterPillPos { background: var(--pos); border-color: var(--pos); color: #fff; }
 .filterPillActive.filterPillNeg { background: var(--neg); border-color: var(--neg); color: #fff; }
 
-/* ── Quick picks (empty watchlist) ───────────────────────────────────────── */
-.quickPicks { margin-top: 16px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-.quickPick {
+/* Filter group (company sub-filter dropdown + sentiment pills) above the feed */
+.filterGroup { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* Company sub-filter dropdown */
+.dropdown { position: relative; }
+.dropdownMenu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 20;
+  min-width: 200px; max-height: 280px; overflow-y: auto;
+  padding: 4px; border: 1px solid var(--line); border-radius: var(--radius-md);
+  background: var(--bg-elev); box-shadow: var(--shadow-md);
+}
+.dropdownItem {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 8px; border-radius: var(--radius-sm); text-align: left;
+  font-size: 12px; color: var(--ink-soft);
+  transition: background var(--transition-fast);
+}
+.dropdownItem:hover { background: var(--bg-sunken); }
+.dropdownItemActive { color: var(--ink); font-weight: 600; }
+.checkbox {
+  width: 16px; height: 16px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); border-radius: 3px;
+  font-size: 11px; color: var(--accent); background: var(--bg);
+}
+.dropdownDivider { height: 1px; margin: 4px 0; background: var(--line-soft); }
+
+/* ── Numbered pagination ─────────────────────────────────────────────────── */
+.pager {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding-top: 8px;
+}
+.pageBtn {
+  min-width: 34px; padding: 6px 10px; border-radius: var(--radius-md);
+  border: 1px solid var(--line); background: var(--bg-elev);
+  font-size: 12px; font-weight: 600; color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+.pageBtn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.pageBtn:disabled { opacity: 0.4; cursor: default; }
+.pageBtnActive { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }
+.pageBtnActive:hover { color: var(--text-on-accent); }
+.pageInfo { margin-left: 8px; font-size: 11px; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
+
+/* Article description preview */
+.articleDesc {
+  margin-top: 4px; font-size: 12px; line-height: 1.45; color: var(--ink-mute);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* ── Company chips bar (track / remove / quick-pick) ─────────────────────── */
+.chipsBar {
+  margin-top: 24px; display: flex; flex-wrap: wrap; align-items: center;
+  gap: 12px 16px;
+}
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.quickPickLabel { font-size: 12px; color: var(--ink-mute); }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 12px; border-radius: 999px;
   border: 1px solid var(--line); background: var(--bg-elev);
   font-size: 12px; font-weight: 500; color: var(--ink-soft);
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
 }
-.quickPick:hover { color: var(--accent); border-color: var(--accent); }
-
-/* ── Compare button (watchlist header) ───────────────────────────────────── */
-.compareBtn {
-  padding: 8px 14px; border-radius: var(--radius-md);
-  border: 1px solid var(--accent); background: var(--accent-soft);
-  font-size: 12px; font-weight: 600; color: var(--accent-deep);
+.chip:hover { color: var(--accent); border-color: var(--accent); }
+.chipActive {
+  border-color: var(--accent); background: var(--accent-soft);
+  color: var(--accent-deep); font-weight: 600; cursor: default;
+}
+.chipActive:hover { color: var(--accent-deep); border-color: var(--accent); }
+.chipRemove {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 999px;
+  font-size: 10px; line-height: 1; color: var(--accent-deep);
   transition: background var(--transition-fast);
 }
-.compareBtn:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.chipRemove:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.clearChip {
+  padding: 6px 12px; border-radius: 999px;
+  border: 1px dashed var(--line); background: transparent;
+  font-size: 12px; font-weight: 500; color: var(--ink-mute);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.clearChip:hover { color: var(--neg); border-color: var(--neg); }
 
 /* ── Compare modal body ──────────────────────────────────────────────────── */
 .compareList { display: flex; flex-direction: column; gap: 14px; }

@@ -136,6 +136,7 @@ export interface NewsSource {
 export interface NewsSourcesResponse {
   sources?: NewsSource[];
   total?: number;
+  total_sources?: number;
   [k: string]: unknown;
 }
 
@@ -243,6 +244,10 @@ export function useNewsFeed(
     queryKey: newsKeys.feed(params),
     queryFn: ({ signal }) => newsApi.feed(params, signal),
     refetchInterval: NEWS_REFRESH_MS,
+    // Override the app-wide refetchOnWindowFocus:false — news is time-sensitive,
+    // so when an analyst returns to the tab (the interval pauses while it's
+    // hidden) we refetch immediately instead of showing minutes-old data.
+    refetchOnWindowFocus: true,
     ...options,
   });
 }
@@ -251,7 +256,7 @@ export function useNewsFeed(
  *  `fetchNextPage` advances the `page` param. Changing company/sector/hours
  *  changes the query key, so React Query resets to page 1 automatically. The
  *  whole loaded set still refreshes on the 5-min cadence. */
-export const FEED_PAGE_SIZE = 40;
+export const FEED_PAGE_SIZE = 20;
 
 export function useInfiniteNewsFeed(params: Omit<FeedParams, "page" | "limit">) {
   return useInfiniteQuery({
@@ -265,6 +270,10 @@ export function useInfiniteNewsFeed(params: Omit<FeedParams, "page" | "limit">) 
       return m.current_page < m.total_pages ? m.current_page + 1 : undefined;
     },
     refetchInterval: NEWS_REFRESH_MS,
+    // Override the app-wide refetchOnWindowFocus:false — news is time-sensitive,
+    // so when an analyst returns to the tab (the interval pauses while it's
+    // hidden) we refetch immediately instead of showing minutes-old data.
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -277,6 +286,10 @@ export function useNewsTrending(
     queryKey: newsKeys.trending(hours, limit),
     queryFn: ({ signal }) => newsApi.trending(hours, limit, signal),
     refetchInterval: NEWS_REFRESH_MS,
+    // Override the app-wide refetchOnWindowFocus:false — news is time-sensitive,
+    // so when an analyst returns to the tab (the interval pauses while it's
+    // hidden) we refetch immediately instead of showing minutes-old data.
+    refetchOnWindowFocus: true,
     ...options,
   });
 }
@@ -305,6 +318,10 @@ export function useNewsStats(
     queryKey: newsKeys.stats(),
     queryFn: ({ signal }) => newsApi.stats(signal),
     refetchInterval: NEWS_REFRESH_MS,
+    // Override the app-wide refetchOnWindowFocus:false — news is time-sensitive,
+    // so when an analyst returns to the tab (the interval pauses while it's
+    // hidden) we refetch immediately instead of showing minutes-old data.
+    refetchOnWindowFocus: true,
     ...options,
   });
 }
@@ -317,6 +334,10 @@ export function useNewsSources(
     queryKey: newsKeys.sources(hours),
     queryFn: ({ signal }) => newsApi.sources(hours, signal),
     refetchInterval: NEWS_REFRESH_MS,
+    // Override the app-wide refetchOnWindowFocus:false — news is time-sensitive,
+    // so when an analyst returns to the tab (the interval pauses while it's
+    // hidden) we refetch immediately instead of showing minutes-old data.
+    refetchOnWindowFocus: true,
     ...options,
   });
 }
