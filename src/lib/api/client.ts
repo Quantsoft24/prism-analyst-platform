@@ -94,4 +94,17 @@ export const apiClient = {
     });
     return handleResponse<T>(response);
   },
+
+  async delete<T = void>(path: string, opts: RequestOptions = {}): Promise<T> {
+    const response = await fetch(buildUrl(path, opts.query), {
+      method: "DELETE",
+      headers: defaultHeaders(),
+      signal: opts.signal,
+    });
+    // 204 No Content (the common delete success) has no body to parse.
+    if (response.ok) {
+      return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
+    }
+    return handleResponse<T>(response);
+  },
 };

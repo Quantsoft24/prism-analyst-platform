@@ -1,0 +1,127 @@
+/* Detailed Backtest — CSS Module (Lakshya tokens). */
+
+.wrap { display: flex; flex-direction: column; gap: 18px; margin-top: 8px; }
+
+.topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.back {
+  padding: 7px 12px; border-radius: var(--radius-md); border: 1px solid var(--line);
+  background: var(--bg-elev); font-size: 13px; font-weight: 600; color: var(--ink-soft);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.back:hover { color: var(--accent); border-color: var(--accent); }
+.crumb { font-size: 12px; color: var(--ink-mute); font-family: var(--font-mono); }
+
+/* Progress */
+.progressCard {
+  padding: 18px; border: 1px solid var(--line); border-radius: var(--radius-xl);
+  background: var(--bg-elev); box-shadow: var(--shadow-sm);
+}
+.progressHead { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink); }
+.progressPct { margin-left: auto; font-family: var(--font-mono); font-weight: 600; color: var(--accent-deep); }
+.progressTrack { margin-top: 12px; height: 8px; border-radius: 999px; background: var(--bg-sunken); overflow: hidden; }
+.progressFill { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.4s ease; }
+.progressNote { margin-top: 10px; font-size: 12px; color: var(--ink-mute); }
+.spinner {
+  width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent);
+  border-radius: 999px; animation: spin 0.7s linear infinite; display: inline-block; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.errorBox {
+  padding: 16px; border: 1px solid var(--neg); border-radius: var(--radius-lg);
+  background: var(--neg-soft); color: var(--neg); font-size: 13px;
+}
+
+/* NAV chart */
+.chartCard {
+  padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--radius-xl);
+  background: var(--bg-elev); box-shadow: var(--shadow-sm);
+}
+.chartHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 10px; }
+.chartTitle { font-family: var(--font-display); font-size: 15px; color: var(--ink); }
+.legend { display: flex; gap: 14px; font-size: 12px; font-family: var(--font-mono); }
+.legPort { color: var(--accent-deep); }
+.legBench { color: var(--ink-mute); }
+.chartSvg { width: 100%; height: 220px; margin-top: 10px; display: block; }
+.linePort { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.lineBench { fill: none; stroke: var(--ink-faint); stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.chartAxis { display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: var(--ink-faint); font-family: var(--font-mono); }
+
+/* Metrics */
+.metricsGrid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 640px) { .metricsGrid { grid-template-columns: 1fr 1fr; } }
+.metricCard {
+  padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-xl);
+  background: var(--bg-elev); box-shadow: var(--shadow-sm);
+}
+.metricCardAccent { border-color: var(--accent); }
+.metricTitle { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 12px; }
+.metricRows { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 12px; }
+.metric { display: flex; flex-direction: column; gap: 2px; }
+.metricLabel { font-size: 11px; color: var(--ink-mute); }
+.metricVal { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); }
+.metricNeg { color: var(--neg); }
+
+/* Rebalances */
+.rebalCard {
+  padding: 14px 18px; border: 1px solid var(--line); border-radius: var(--radius-xl);
+  background: var(--bg-elev); box-shadow: var(--shadow-sm);
+}
+.rebalHead { font-family: var(--font-display); font-size: 14px; color: var(--ink); margin-bottom: 10px; }
+.rebalSub { font-family: inherit; font-size: 12px; color: var(--ink-mute); }
+.rebalRow { display: flex; flex-wrap: wrap; gap: 6px; }
+.rebalChip {
+  padding: 5px 9px; border-radius: var(--radius-sm); background: var(--bg-sunken);
+  font-size: 11px; font-family: var(--font-mono); color: var(--ink-soft);
+}
+
+/* Tabs */
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); }
+.tab {
+  padding: 9px 14px; border: none; background: none; font-size: 13px; font-weight: 600;
+  color: var(--ink-mute); border-bottom: 2px solid transparent; margin-bottom: -1px;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.tab:hover { color: var(--ink); }
+.tabActive { color: var(--ink); border-bottom-color: var(--accent); }
+
+/* Holdings + sector cards */
+.holdCard {
+  padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--radius-xl);
+  background: var(--bg-elev); box-shadow: var(--shadow-sm);
+}
+.holdHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.holdTitle { font-family: var(--font-display); font-size: 15px; color: var(--ink); }
+.holdSel {
+  padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius-md);
+  background: var(--bg); color: var(--ink-soft); font-size: 12px; font-family: var(--font-mono);
+}
+.holdSub { margin-top: 4px; font-size: 12px; color: var(--ink-mute); }
+.newTag {
+  display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 4px;
+  background: var(--pos-soft); color: var(--pos); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.04em; vertical-align: middle;
+}
+.holdList { margin-top: 12px; display: flex; flex-direction: column; }
+.holdRow {
+  display: grid; grid-template-columns: 1.3fr 1.2fr 2fr auto; align-items: center; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px;
+}
+.holdRow:last-child { border-bottom: none; }
+.holdSym { font-weight: 600; color: var(--ink); }
+.holdSec { font-size: 12px; color: var(--ink-mute); }
+.holdBar { height: 8px; border-radius: 999px; background: var(--bg-sunken); overflow: hidden; }
+.holdBarFill { display: block; height: 100%; background: var(--accent-soft); border-radius: 999px; }
+.holdW { font-variant-numeric: tabular-nums; color: var(--ink-soft); text-align: right; min-width: 56px; }
+
+.ddArea { fill: var(--neg-soft); stroke: var(--neg); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+
+.sectorList { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.sectorRow { display: grid; grid-template-columns: 1.4fr 2.4fr auto; align-items: center; gap: 10px; font-size: 13px; }
+.sectorName { color: var(--ink-soft); }
+.sectorBar { height: 10px; border-radius: 999px; background: var(--bg-sunken); overflow: hidden; }
+.sectorBarFill { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.sectorW { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; min-width: 48px; text-align: right; }
+
+.notes { font-size: 12px; color: var(--ink-mute); }
+.notes li { margin-left: 16px; list-style: disc; }
