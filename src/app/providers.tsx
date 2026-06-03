@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as React from "react";
 
+import { DialogProvider } from "@/components/Dialog";
 import { ToastProvider } from "@/components/Toast";
 
 /**
@@ -44,7 +45,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const queryClient = getQueryClient();
   return (
     <QueryClientProvider client={queryClient}>
-      <ToastProvider>{children}</ToastProvider>
+      <ToastProvider>
+        <DialogProvider>{children}</DialogProvider>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }

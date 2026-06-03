@@ -1,0 +1,44 @@
+/* Reusable modal/dialog — themed, accessible (Lakshya tokens). */
+
+.scrim {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+  backdrop-filter: blur(2px); animation: fade 0.15s ease;
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+.modal {
+  width: 100%; max-width: 440px;
+  border: 1px solid var(--line); border-radius: var(--radius-xl);
+  background: var(--bg-elev); box-shadow: var(--shadow-lg);
+  padding: 22px; animation: pop 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes pop { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+.title { font-family: var(--font-display); font-size: 18px; color: var(--ink); }
+.message { margin-top: 8px; font-size: 14px; line-height: 1.5; color: var(--ink-soft); }
+
+.field { display: flex; flex-direction: column; gap: 6px; margin-top: 16px; }
+.label { font-size: 12px; font-weight: 600; color: var(--ink-soft); }
+.input {
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-md);
+  background: var(--bg); color: var(--ink); font-size: 14px; font-family: inherit;
+}
+.input:focus-visible { outline: none; border-color: var(--accent); }
+
+.actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.cancel {
+  padding: 9px 16px; border-radius: var(--radius-md); border: 1px solid var(--line);
+  background: var(--bg-elev); font-size: 13px; font-weight: 600; color: var(--ink-soft);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.cancel:hover { color: var(--ink); border-color: var(--ink-mute); }
+.confirm {
+  padding: 9px 18px; border-radius: var(--radius-md); border: none;
+  background: var(--accent); color: var(--text-on-accent); font-size: 13px; font-weight: 600;
+  transition: opacity var(--transition-fast);
+}
+.confirm:hover:not(:disabled) { opacity: 0.92; }
+.confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+.danger { background: var(--neg); }
