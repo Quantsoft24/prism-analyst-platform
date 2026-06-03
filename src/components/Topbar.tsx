@@ -11,6 +11,7 @@ const VIEW_LABELS: Record<NavView, string> = {
   bmc: "Business Model Canvas",
   news: "News & Sentiment",
   stocks: "Stock Dashboard",
+  portfolio: "Portfolio Builder",
   reports: "Reports Library",
   settings: "Settings",
 };

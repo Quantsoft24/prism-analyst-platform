@@ -11,6 +11,7 @@ import {
   metricValue,
   priceChange,
   rangeReturn,
+  useSecurities,
   useStockPrices,
   type Security,
   type StockMetric,
@@ -47,6 +48,22 @@ export default function StockDashboardView({ onAsk }: StockDashboardViewProps) {
   const [selected, setSelected] = React.useState<Security | null>(null);
   const [metric, setMetric] = React.useState<StockMetric>("close");
   const [range, setRange] = React.useState<StockRange>("1M");
+
+  // Deep-link: `/stocks?security=<security_id>` (e.g. clicking a holding in the
+  // Portfolio Builder) pre-selects that security once its row is loaded. Read
+  // from the URL client-side so the page stays statically prerenderable.
+  const securities = useSecurities();
+  const appliedDeepLink = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (typeof window === "undefined" || !securities.data) return;
+    const id = new URLSearchParams(window.location.search).get("security");
+    if (!id || appliedDeepLink.current === id) return;
+    const match = securities.data.find((s) => String(s.security_id) === id);
+    if (match) {
+      setSelected(match);
+      appliedDeepLink.current = id;
+    }
+  }, [securities.data]);
 
   const prices = useStockPrices(selected?.security_id ?? null, range);
   const points = prices.data?.points ?? [];

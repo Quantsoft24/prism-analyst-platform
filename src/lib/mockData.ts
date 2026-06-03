@@ -13,7 +13,7 @@ export const MOCK_USER = {
 };
 
 /* ── Navigation ── */
-export type NavView = "dashboard" | "chat" | "companies" | "bmc" | "news" | "stocks" | "reports" | "settings";
+export type NavView = "dashboard" | "chat" | "companies" | "bmc" | "news" | "stocks" | "portfolio" | "reports" | "settings";
 
 export interface NavItem {
   id: NavView;
@@ -29,6 +29,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "bmc", label: "Business Models", icon: "bmc" },
   { id: "news", label: "News & Sentiment", icon: "news" },
   { id: "stocks", label: "Stock Dashboard", icon: "stocks" },
+  { id: "portfolio", label: "Portfolio Builder", icon: "portfolio" },
   { id: "reports", label: "Reports Library", icon: "reports" },
   { id: "settings", label: "Settings", icon: "settings" },
 ];
