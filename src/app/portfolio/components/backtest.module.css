@@ -42,7 +42,7 @@
 .legend { display: flex; gap: 14px; font-size: 12px; font-family: var(--font-mono); }
 .legPort { color: var(--accent-deep); }
 .legBench { color: var(--ink-mute); }
-.chartSvg { width: 100%; height: 220px; margin-top: 10px; display: block; }
+.chartSvg { width: 100%; height: 256px; margin-top: 10px; display: block; }
 .linePort { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .lineBench { fill: none; stroke: var(--ink-faint); stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
 .chartAxis { display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: var(--ink-faint); font-family: var(--font-mono); }
@@ -123,5 +123,88 @@
 .sectorBarFill { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
 .sectorW { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; min-width: 48px; text-align: right; }
 
+/* Attribution */
+.attrWrap { display: flex; flex-direction: column; gap: 14px; }
+.attrList { margin-top: 12px; display: flex; flex-direction: column; gap: 7px; }
+.attrRow { display: grid; grid-template-columns: 1.4fr 2.6fr auto; align-items: center; gap: 10px; font-size: 13px; }
+.attrName { color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attrVal { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--pos); min-width: 56px; text-align: right; }
+.attrNeg { color: var(--neg); }
+.diverge { position: relative; height: 14px; border-radius: 4px; background: var(--bg-sunken); }
+.divergeMid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.divergeFill { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; }
+.divergePos { background: var(--pos); }
+.divergeNeg { background: var(--neg); }
+
+.contribCols { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 640px) { .contribCols { grid-template-columns: 1fr 1fr; } }
+.contribList { margin-top: 10px; display: flex; flex-direction: column; }
+.contribRow { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
+.contribRow:last-child { border-bottom: none; }
+.contribSym { font-weight: 600; color: var(--ink); }
+.contribVal { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--pos); }
+
 .notes { font-size: 12px; color: var(--ink-mute); }
 .notes li { margin-left: 16px; list-style: disc; }
+
+/* ── Chart toolbar: benchmark selector + absolute/relative toggle ─────────── */
+.chartToolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.toolbarGroup { display: flex; align-items: center; gap: 8px; }
+.toolbarLabel { font-size: 12px; font-weight: 600; color: var(--ink-mute); }
+.segmented {
+  display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--line);
+  border-radius: var(--radius-md); background: var(--bg-sunken);
+}
+.segBtn {
+  padding: 6px 12px; border: none; background: none; border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 600; color: var(--ink-mute); cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.segBtn:hover { color: var(--ink); }
+.segActive { background: var(--bg-elev); color: var(--accent-deep); box-shadow: var(--shadow-sm); }
+
+/* ── Interactive chart body (gridlines, hover guide, tooltip) ─────────────── */
+.chartBody { position: relative; }
+.grid line { stroke: var(--line-soft); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hoverGuide { stroke: var(--ink-faint); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.baseLine { stroke: var(--ink-faint); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.navGradTop { stop-color: var(--accent); stop-opacity: 0.20; }
+.navGradBot { stop-color: var(--accent); stop-opacity: 0; }
+.legNeg { color: var(--neg); }
+
+.tooltip {
+  position: absolute; top: 8px; transform: translateX(-50%); pointer-events: none;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-md);
+  background: var(--bg-elev); box-shadow: var(--shadow-md); font-size: 12px; z-index: 5; min-width: 124px;
+}
+.tipDate { font-family: var(--font-mono); font-size: 11px; color: var(--ink-mute); margin-bottom: 5px; }
+.tipRow { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+.tipDot { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; }
+.tipPort { background: var(--accent); }
+.tipBench { background: var(--ink-faint); }
+.tipNeg { background: var(--neg); }
+.tipLabel { color: var(--ink-soft); }
+.tipVal { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+
+/* ── Clickable symbols → Stock Dashboard ─────────────────────────────────── */
+.holdSymLink, .contribSymLink {
+  padding: 0; border: none; background: none; font: inherit; font-weight: 600;
+  color: var(--accent-deep); cursor: pointer; text-align: left;
+}
+.holdSymLink:hover, .contribSymLink:hover { text-decoration: underline; }
+
+/* ── Sector table (absolute portfolio vs benchmark + active) ──────────────── */
+.secTable { margin-top: 12px; display: flex; flex-direction: column; }
+.secTRow {
+  display: grid; grid-template-columns: 1.5fr 1.3fr 1.3fr 0.8fr; align-items: center; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px;
+}
+.secTRow:last-child { border-bottom: none; }
+.secTHead {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--ink-faint); border-bottom: 1px solid var(--line);
+}
+.secTNum { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.secMiniBar { flex: 1; height: 7px; min-width: 28px; border-radius: 999px; background: var(--bg-sunken); overflow: hidden; }
+.secMiniFill { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.secMiniBench { background: var(--ink-faint); }

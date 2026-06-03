@@ -2,6 +2,9 @@
 
 import * as React from "react";
 
+import { useDialog } from "@/components/Dialog";
+import Dropdown, { type DropdownOption } from "@/components/Dropdown";
+import TrashIcon from "@/components/TrashIcon";
 import {
   useCreateCustomFactor,
   useCustomFactors,
@@ -17,6 +20,7 @@ import styles from "./factor.module.css";
 const PREVIEW_ID = "__preview__";
 
 export default function FactorBuilderView() {
+  const dialog = useDialog();
   const factors = useFactors();
   const universes = useUniverses();
   const preview = useFactorPreviewMutation();
@@ -39,9 +43,9 @@ export default function FactorBuilderView() {
     });
   };
 
-  const save = () => {
+  const save = async () => {
     if (!name.trim()) {
-      window.alert("Give your factor a name first.");
+      await dialog.alert({ title: "Name required", message: "Give your factor a name before saving." });
       return;
     }
     create.mutate(
@@ -49,6 +53,10 @@ export default function FactorBuilderView() {
       { onSuccess: () => setName("") },
     );
   };
+
+  const uniOptions: DropdownOption<string>[] = (universes.data ?? []).map((u) => ({
+    value: String(u.index_id), label: u.index_name ?? `Index ${u.index_id}`,
+  }));
 
   const byCategory = React.useMemo(() => {
     const map = new Map<string, { id: string; name: string }[]>();
@@ -117,9 +125,7 @@ export default function FactorBuilderView() {
           </div>
           <div className={styles.metaRow}>
             <label className={styles.uniLabel}>Preview on</label>
-            <select className={styles.input} value={indexId} onChange={(e) => setIndexId(Number(e.target.value))}>
-              {(universes.data ?? []).map((u) => (<option key={u.index_id} value={u.index_id}>{u.index_name}</option>))}
-            </select>
+            <Dropdown value={String(indexId)} options={uniOptions} onChange={(v) => setIndexId(Number(v))} ariaLabel="Preview universe" minWidth={160} />
           </div>
 
           <div className={styles.actions}>
@@ -157,7 +163,9 @@ export default function FactorBuilderView() {
               <div key={c.id} className={styles.savedChip}>
                 <span className={styles.savedName}>{c.name}</span>
                 <code className={styles.savedExpr}>{c.expression}</code>
-                <button className={styles.savedDel} title="Delete" onClick={() => del.mutate(c.id)}>✕</button>
+                <button className={styles.savedDel} title="Delete" onClick={async () => {
+                  if (await dialog.confirm({ title: "Delete factor?", message: `Delete “${c.name}”?`, confirmLabel: "Delete", danger: true })) del.mutate(c.id);
+                }}><TrashIcon /></button>
               </div>
             ))}
           </div>

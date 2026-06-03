@@ -153,6 +153,37 @@ export interface RebalanceSnap {
   }[];
 }
 
+export interface SectorActive {
+  sector: string;
+  portfolio: number;
+  benchmark: number;
+  active: number;
+}
+export interface FactorTilt {
+  factor_id: string;
+  exposure: number;
+}
+export interface Contributor {
+  security_id: number;
+  symbol: string | null;
+  contribution: number;
+}
+export interface Attribution {
+  as_of: string;
+  sector_active: SectorActive[];
+  factor_tilts: FactorTilt[];
+  top_contributors: Contributor[];
+  bottom_contributors: Contributor[];
+  style_tilts?: FactorTilt[];   // always-on equity-style lenses (older runs omit)
+}
+
+export interface IndexSeries {
+  index_id: number;
+  index_name: string | null;
+  dates: string[];
+  nav: number[];
+}
+
 export interface BacktestResult {
   dates: string[];
   nav: number[];
@@ -161,6 +192,7 @@ export interface BacktestResult {
   metrics: BacktestMetrics;
   benchmark_metrics: BacktestMetrics;
   rebalances: RebalanceSnap[];
+  attribution: Attribution | null;
   notes: string[];
 }
 
@@ -222,6 +254,11 @@ export const portfolioApi = {
     apiClient.post<BacktestJob>(`${base}/backtest`, { body }),
   getBacktest: (id: string) => apiClient.get<BacktestJob>(`${base}/backtest/${id}`),
   listBacktests: () => apiClient.get<BacktestJob[]>(`${base}/backtests`),
+  deleteBacktest: (id: string) => apiClient.delete<void>(`${base}/backtest/${id}`),
+  indexSeries: (index_id: number, start: string, end: string) =>
+    apiClient.get<IndexSeries>(
+      `${base}/index-series?index_id=${index_id}&start=${start}&end=${end}`,
+    ),
   factorPreview: (body: {
     index_id: number;
     factor_id?: string | null;
@@ -290,6 +327,25 @@ export function useBacktest(id: string | null) {
 
 export function useBacktests() {
   return useQuery({ queryKey: portfolioKeys.backtests, queryFn: portfolioApi.listBacktests });
+}
+
+export function useDeleteBacktest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: portfolioApi.deleteBacktest,
+    onSuccess: () => qc.invalidateQueries({ queryKey: portfolioKeys.backtests }),
+  });
+}
+
+/** Fetch an index's cumulative NAV over a window — to overlay/switch the
+ *  benchmark on the NAV chart without re-running the backtest. */
+export function useIndexSeries(indexId: number | null, start: string, end: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["pb", "index-series", indexId, start, end] as const,
+    queryFn: () => portfolioApi.indexSeries(indexId!, start, end),
+    enabled: enabled && indexId != null && !!start && !!end,
+    staleTime: 3600_000,
+  });
 }
 
 export function useSubmitBacktest() {

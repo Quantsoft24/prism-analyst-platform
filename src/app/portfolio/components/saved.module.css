@@ -26,6 +26,16 @@
 .delBtn:hover:not(:disabled) { color: var(--neg); border-color: var(--neg); }
 .delBtn:disabled { opacity: 0.5; }
 
+.statusBadge {
+  display: inline-block; margin-left: 10px; padding: 2px 8px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  vertical-align: middle; font-family: var(--font-mono);
+}
+.stQueued { background: var(--bg-sunken); color: var(--ink-mute); }
+.stRunning { background: var(--info-soft); color: var(--info); }
+.stOk { background: var(--pos-soft); color: var(--pos); }
+.stFail { background: var(--neg-soft); color: var(--neg); }
+
 .empty, .error {
   margin-top: 20px; padding: 40px 20px; text-align: center;
   border: 1px dashed var(--line); border-radius: var(--radius-xl);

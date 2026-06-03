@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { useDialog } from "@/components/Dialog";
+import TrashIcon from "@/components/TrashIcon";
 import { useDeleteStrategy, useStrategies } from "@/lib/api/portfolio";
 
 import type { BuilderConfig } from "./BuilderView";
@@ -12,6 +14,7 @@ const UNIVERSE_NAMES: Record<number, string> = {
 };
 
 export default function SavedResultsView({ onLoad }: { onLoad: (cfg: BuilderConfig) => void }) {
+  const dialog = useDialog();
   const strategies = useStrategies();
   const del = useDeleteStrategy();
 
@@ -46,11 +49,12 @@ export default function SavedResultsView({ onLoad }: { onLoad: (cfg: BuilderConf
                 className={styles.delBtn}
                 title="Delete"
                 disabled={del.isPending}
-                onClick={() => {
-                  if (window.confirm(`Delete "${s.name}"?`)) del.mutate(s.id);
+                onClick={async () => {
+                  const ok = await dialog.confirm({ title: "Delete strategy?", message: `Delete “${s.name}”? This can't be undone.`, confirmLabel: "Delete", danger: true });
+                  if (ok) del.mutate(s.id);
                 }}
               >
-                ✕
+                <TrashIcon />
               </button>
             </div>
           </div>
