@@ -70,6 +70,9 @@ services:
     build:
       context: ../prism-analyst-services
       dockerfile: Dockerfile
+    # Tag the built image so the worker (below) reuses it instead of building a
+    # second time — they're the same code, just a different entrypoint.
+    image: prism-backend:latest
     container_name: prism-backend
     restart: unless-stopped
     env_file: ../prism-analyst-services/.env
@@ -83,6 +86,30 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    networks:
+      - prism-net
+
+  # ── PRISM Backtest Worker (no ports) ──
+  #
+  # Durable backtest jobs (pb_backtests) are claimed and run here, NOT in the
+  # web process — the API only enqueues. Same image as `backend` (reused via the
+  # `prism-backend:latest` tag, so no second build), different entrypoint. Reads
+  # the same env (primary DB for the job queue + investment RDS for prices). If
+  # this service isn't running, submitted backtests stay `queued` forever.
+  # Restart-safe: it reclaims stale RUNNING jobs on startup and claims work with
+  # FOR UPDATE SKIP LOCKED, so multiple replicas are safe.
+  worker:
+    image: prism-backend:latest
+    container_name: prism-worker
+    restart: unless-stopped
+    env_file: ../prism-analyst-services/.env
+    command: ["python", "-m", "src.portfolio.worker"]
+    # ── Uncomment alongside backend when DB SSL uses a CA bundle ──
+    # volumes:
+    #   - ../prism-analyst-services/global-bundle.pem:/app/global-bundle.pem:ro
+    depends_on:
+      backend:
+        condition: service_started
     networks:
       - prism-net
 
