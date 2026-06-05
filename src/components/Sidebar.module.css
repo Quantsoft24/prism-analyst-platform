@@ -296,6 +296,36 @@
   color: var(--ink);
   background: var(--bg-tint);
 }
+.navRecentEmpty {
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 7px 10px;
+  color: var(--ink-faint);
+}
+.navRecentRow {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.navRecentRow .navRecent {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.navRecentDelete {
+  opacity: 0;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-right: 4px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  color: var(--ink-faint);
+  font-size: 11px;
+  transition: opacity var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+}
+.navRecentRow:hover .navRecentDelete { opacity: 1; }
+.navRecentDelete:hover { color: var(--neg); background: var(--neg-soft); }
 
 /* ── Footer ── */
 .sidebarFooter {
@@ -303,16 +333,41 @@
   padding: 12px 8px;
   border-top: 1px solid var(--line-soft);
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 10px;
 }
 
-/* Collapsed footer: avatar above, theme toggle below — vertical stack so
-   nothing gets clipped at the 64px width. */
+/* Row 1: avatar + name/email. */
+.footerProfile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 4px;
+  margin: -4px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.footerProfile:hover {
+  background: var(--bg-tint);
+}
+
+/* Row 2: action icons (sign in/out, mock toggle, theme). */
+.footerActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Collapsed footer: everything centers and stacks at the 64px width. */
 .sidebarFooterCollapsed {
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
   padding: 12px 0;
+}
+.sidebarFooterCollapsed .footerActions {
+  flex-direction: column;
 }
 
 .avatar {
@@ -336,11 +391,17 @@
 .userName {
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .userFirm {
   font-size: 11px;
   color: var(--ink-mute);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .themeToggle {

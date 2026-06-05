@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import {
   runChatStream,
@@ -13,6 +14,8 @@ import {
   type FinalAnswer,
   type ToolNextAction,
 } from "@/lib/api/chat";
+import { conversationKeys, conversationsApi } from "@/lib/api/conversations";
+import { quotaKeys } from "@/lib/api/quota";
 import {
   INTENT_CONFIGS,
   routeIntent,
@@ -100,6 +103,8 @@ interface UseChatReturn {
   /** Re-run the most recent user query. Useful after a retriable error. */
   retry: () => void;
   reset: () => void;
+  /** Load a past conversation by session_id (replay its turns) and resume it. */
+  loadConversation: (sessionId: string) => Promise<void>;
 }
 
 const EMPTY_META: RunMeta = {
@@ -133,6 +138,11 @@ const EMPTY_META: RunMeta = {
  *   * Aborts in flight on unmount or when ``send`` is called again.
  */
 export function useChat(): UseChatReturn {
+  const queryClient = useQueryClient();
+  const refreshConversationList = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: conversationKeys.list });
+    void queryClient.invalidateQueries({ queryKey: quotaKeys.quota }); // a message consumed quota
+  }, [queryClient]);
   const [phase, setPhase] = useState<Phase>("idle");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [activeIntent, setActiveIntent] = useState<IntentType | null>(null);
@@ -231,6 +241,9 @@ export function useChat(): UseChatReturn {
               session_id: event.session_id,
               agent_name: event.agent_name,
             }));
+            // The agent_runs row now exists → the conversation list (sidebar /
+            // dashboard / account) should pick it up without a page refresh.
+            refreshConversationList();
           },
 
           onAgentThought: (event) => {
@@ -375,6 +388,7 @@ export function useChat(): UseChatReturn {
 
           onFinal: (event) => {
             setPhase("done");
+            refreshConversationList(); // refresh preview / last-activity
             setRunMeta((m) => ({
               ...m,
               cost_usd: event.cost_usd,
@@ -412,6 +426,7 @@ export function useChat(): UseChatReturn {
 
           onError: (event) => {
             setPhase("done");
+            refreshConversationList();
             setMessages((prev) =>
               updateLastAssistant(prev, (msg) => ({
                 ...msg,
@@ -426,7 +441,7 @@ export function useChat(): UseChatReturn {
 
       streamRef.current.done.finally(() => clearTimeout(workspaceReveal));
     },
-    [cancelInflight],
+    [cancelInflight, refreshConversationList],
   );
 
   const send = useCallback(
@@ -491,6 +506,61 @@ export function useChat(): UseChatReturn {
     setRunMeta(EMPTY_META);
   }, [cancelInflight]);
 
+  /**
+   * Replay a past conversation: fetch its turns, rebuild the message list, and
+   * point `session_id` at it so the next message continues the same session.
+   */
+  const loadConversation = useCallback(
+    async (sessionId: string) => {
+      cancelInflight();
+      const detail = await conversationsApi.get(sessionId);
+
+      const msgs: ChatMessage[] = [];
+      for (const t of detail.turns) {
+        msgs.push({ role: "user", text: t.user_input });
+        msgs.push({
+          ...newAssistantStub(),
+          isThinking: false,
+          showAnswer: true,
+          text: t.final_answer ?? "",
+          streamedText: t.final_answer ?? "",
+          toolCalls: (t.tool_trace ?? []).map(traceToToolCall),
+          error:
+            t.status === "failed"
+              ? {
+                  type: "error",
+                  code: "failed",
+                  message: "This run did not complete.",
+                  retriable: false,
+                  agent_run_id: t.agent_run_id,
+                }
+              : null,
+        });
+      }
+
+      const firstQuery = detail.turns[0]?.user_input ?? "Conversation";
+      const intent = routeIntent(firstQuery);
+      const intentBase = INTENT_CONFIGS[intent];
+
+      sessionIdRef.current = sessionId;
+      lastQueryRef.current = detail.turns[detail.turns.length - 1]?.user_input ?? null;
+      setMessages(msgs);
+      setActiveIntent(intent);
+      setIntentConfig({
+        title: deriveTitle(firstQuery),
+        statusMsg: "Resumed conversation",
+        tools: [],
+        answer: "",
+        contextTag: intentBase.contextTag,
+        tabs: intentBase.tabs,
+      });
+      setRunMeta({ ...EMPTY_META, session_id: sessionId });
+      setShowWorkspace(true);
+      setPhase("done");
+    },
+    [cancelInflight],
+  );
+
   return {
     phase,
     messages,
@@ -503,6 +573,28 @@ export function useChat(): UseChatReturn {
     stop,
     retry,
     reset,
+    loadConversation,
+  };
+}
+
+/** Map a stored tool_trace entry to a (completed) ToolCallState for replay. */
+function traceToToolCall(entry: Record<string, unknown>, i: number): ToolCallState {
+  const tool = typeof entry.tool === "string" ? entry.tool : "tool";
+  const callId = typeof entry.call_id === "string" ? entry.call_id : `${tool}-${i}`;
+  const args = (entry.args && typeof entry.args === "object" ? entry.args : {}) as Record<string, unknown>;
+  const latency = typeof entry.latency_ms === "number" ? entry.latency_ms : null;
+  return {
+    call_id: callId,
+    tool,
+    args,
+    status: "done",
+    result_summary: null,
+    error: null,
+    error_code: null,
+    next_action: null,
+    latency_ms: latency,
+    freshness: null,
+    retry_attempt: 0,
   };
 }
 

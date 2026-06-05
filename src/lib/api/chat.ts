@@ -12,6 +12,7 @@
  */
 
 import { config } from "@/lib/config";
+import { authHeaders } from "./client";
 import { isMockModeEnabled, runMockChatStream, setMockMode } from "./chat.mock";
 
 /** Re-exports — UI components import these from the same module they import
@@ -265,23 +266,32 @@ export function runChatStream(
   const url = new URL("/api/v1/chat/run", config.apiUrl).toString();
 
   const done = (async (): Promise<FinalEvent | ErrorEvent | null> => {
+    // Same auth as apiClient: the Supabase bearer token when signed in (so the
+    // backend attributes this agent_run to the user → it shows in history), or
+    // the dev-firm header when auth is off.
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-        "X-Dev-Firm": "QUANTSOFT",
-      },
+      headers: { ...(await authHeaders()), Accept: "text/event-stream" },
       body: JSON.stringify(request),
       signal: controller.signal,
     });
 
     if (!response.ok || !response.body) {
       const text = await response.text().catch(() => "");
+      // FastAPI errors are JSON `{"detail": "..."}` — surface the clean message
+      // (e.g. the daily-limit notice) instead of the raw JSON.
+      let message = text || `HTTP ${response.status}`;
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed.detail === "string") message = parsed.detail;
+      } catch {
+        // not JSON — keep the raw text
+      }
       const errEvent: ErrorEvent = {
         type: "error",
         code: `http_${response.status}`,
-        message: text || `HTTP ${response.status}`,
+        message,
+        // 429 = daily limit: not retriable (waiting won't help until tomorrow).
         retriable: response.status >= 500,
         agent_run_id: null,
       };

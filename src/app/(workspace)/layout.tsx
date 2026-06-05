@@ -8,7 +8,9 @@ import SearchModal from "@/components/SearchModal";
 import { ChatProvider, useChatActions } from "@/components/ChatProvider";
 import { NAV_ITEMS, type NavView } from "@/lib/mockData";
 
-const NAV_IDS = new Set<string>(NAV_ITEMS.map((n) => n.id));
+// Rendered nav items + the routes reachable from the footer (settings) and
+// deep links (account) — so the active tab still resolves on those pages.
+const NAV_IDS = new Set<string>([...NAV_ITEMS.map((n) => n.id), "account", "settings"]);
 
 /** "/stocks" → "stocks" (NavView); unknown paths fall back to "chat". */
 function pathnameToView(pathname: string): NavView {
