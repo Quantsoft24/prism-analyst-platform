@@ -15,6 +15,7 @@ import {
   type ToolNextAction,
 } from "@/lib/api/chat";
 import { conversationKeys, conversationsApi } from "@/lib/api/conversations";
+import { quotaKeys } from "@/lib/api/quota";
 import {
   INTENT_CONFIGS,
   routeIntent,
@@ -140,6 +141,7 @@ export function useChat(): UseChatReturn {
   const queryClient = useQueryClient();
   const refreshConversationList = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: conversationKeys.list });
+    void queryClient.invalidateQueries({ queryKey: quotaKeys.quota }); // a message consumed quota
   }, [queryClient]);
   const [phase, setPhase] = useState<Phase>("idle");
   const [messages, setMessages] = useState<ChatMessage[]>([]);

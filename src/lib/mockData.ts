@@ -31,8 +31,8 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "stocks", label: "Stock Dashboard", icon: "stocks" },
   { id: "portfolio", label: "Portfolio Builder", icon: "portfolio" },
   { id: "reports", label: "Reports Library", icon: "reports" },
-  { id: "account", label: "My Activity", icon: "account" },
-  { id: "settings", label: "Settings", icon: "settings" },
+  // "account" (My Activity) + "settings" live at the bottom of the sidebar
+  // (footer), ChatGPT/Claude-style — not in the main workspace nav list.
 ];
 
 export const RECENT_CHATS = [

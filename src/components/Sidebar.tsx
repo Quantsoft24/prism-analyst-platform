@@ -323,40 +323,50 @@ export default function Sidebar({
             collapsed && styles.sidebarFooterCollapsed,
           )}
         >
-          {/* Row 1: avatar + identity */}
-          <div className={styles.footerProfile}>
-            <Tooltip
-              label={authUser.secondary ? `${authUser.name} · ${authUser.secondary}` : authUser.name}
-              side="right"
-              disabled={!collapsed}
+          {/* Row 1: avatar + identity → opens Settings (profile/account live there) */}
+          <Tooltip
+            label={collapsed ? "Settings" : authUser.secondary ? `${authUser.name} · ${authUser.secondary}` : authUser.name}
+            side="right"
+            disabled={!collapsed}
+          >
+            <div
+              className={styles.footerProfile}
+              role="button"
+              tabIndex={0}
+              onClick={() => handleNavClick("settings")}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleNavClick("settings");
+                }
+              }}
+              aria-label="Open settings"
             >
               <div className={styles.avatar}>{authUser.initials}</div>
-            </Tooltip>
-            {!collapsed && (
-              <div className={styles.userInfo}>
-                <div className={styles.userName}>{authUser.name}</div>
-                {authUser.secondary && <div className={styles.userFirm}>{authUser.secondary}</div>}
-              </div>
-            )}
-          </div>
+              {!collapsed && (
+                <div className={styles.userInfo}>
+                  <div className={styles.userName}>{authUser.name}</div>
+                  {authUser.secondary && <div className={styles.userFirm}>{authUser.secondary}</div>}
+                </div>
+              )}
+            </div>
+          </Tooltip>
 
-          {/* Row 2: actions */}
+          {/* Row 2: actions — Settings gear (profile/My Activity/logout inside),
+              sign-in for guests, mock toggle, theme. */}
           <div className={styles.footerActions}>
-            {authUser.authEnabled && !collapsed && authUser.isSignedIn && (
-              <Tooltip label="Sign out" side="right">
-                <button
-                  className={styles.themeToggle}
-                  onClick={() => void authUser.signOut()}
-                  aria-label="Sign out"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                    <polyline points="16 17 21 12 16 7" />
-                    <line x1="21" y1="12" x2="9" y2="12" />
-                  </svg>
-                </button>
-              </Tooltip>
-            )}
+            <Tooltip label="Settings" side="right">
+              <button
+                className={styles.themeToggle}
+                onClick={() => handleNavClick("settings")}
+                aria-label="Settings"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </button>
+            </Tooltip>
             {authUser.authEnabled && !collapsed && !authUser.isSignedIn && (
               <Tooltip label="Sign in" side="right">
                 <a className={styles.themeToggle} href="/sign-in" aria-label="Sign in">

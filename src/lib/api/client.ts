@@ -39,8 +39,27 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
   return url.toString();
 }
 
+/** Stable per-browser id for anonymous (not-signed-in) callers — used by the
+ *  backend only to enforce the guest daily message limit. */
+export function guestId(): string {
+  if (typeof window === "undefined") return "";
+  let id = window.localStorage.getItem("prism.guestId");
+  if (!id) {
+    id =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `g_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    window.localStorage.setItem("prism.guestId", id);
+  }
+  return id;
+}
+
 export async function authHeaders(): Promise<Record<string, string>> {
   const base: Record<string, string> = { "Content-Type": "application/json" };
+  // Identify the guest browser so the backend can apply the guest daily cap
+  // (harmless when signed in — the server keys on user_id then).
+  const gid = guestId();
+  if (gid) base["X-Guest-Id"] = gid;
   // Auth OFF (default): identify as the dev firm via the header the backend's
   // get_current_principal reads. Behaviour unchanged from before auth landed.
   if (!config.authEnabled) {

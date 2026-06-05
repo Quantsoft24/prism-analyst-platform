@@ -81,6 +81,38 @@
 .linkBtn:hover { color: var(--accent); }
 .link { color: var(--accent); }
 .note { margin-top: 10px; font-size: 12px; color: var(--ink-mute); }
+
+/* "or" divider + Continue-as-guest */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 2px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+.guestBtn {
+  padding: 9px 14px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--ink-mute);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.guestBtn:hover { color: var(--accent); border-color: var(--accent); }
 .error {
   font-size: 12px;
   color: var(--neg);

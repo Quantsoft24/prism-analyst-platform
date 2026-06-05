@@ -7,20 +7,22 @@ import { useIntegrations, useToggleIntegration, type IntegrationHealth } from "@
 import { useMe, useUpdatePreferences, useUsage } from "@/lib/api/me";
 import { useAuthUser } from "@/lib/auth/useAuthUser";
 import { useWatchlist } from "@/hooks/useWatchlist";
+import AccountView from "@/app/account/components/AccountView";
 import styles from "./SettingsView.module.css";
 
 /* ── Settings nav items ── */
 const SETTINGS_NAV = [
   "Profile",
+  "My Activity",
   "Tools & Capabilities",
-  "Data Sources",
+  "Notifications",
   "Model & Reasoning",
   "Citation Policy",
   "Watchlist",
-  "Notifications",
+  "Billing",
+  "Data Sources",
   "API & Webhooks",
   "Compliance",
-  "Billing",
 ];
 
 /* ── Toggle component ── */
@@ -181,6 +183,9 @@ function ProfileSection() {
       </SettingRow>
       <SettingRow label="Role" desc={me.data?.role ?? "owner"}>
         <span className={styles.badge}>Pilot</span>
+      </SettingRow>
+      <SettingRow label="Sign out" desc="End your session on this device.">
+        <button className={styles.editBtn} onClick={() => void auth.signOut()}>Sign out</button>
       </SettingRow>
     </div>
   );
@@ -362,7 +367,7 @@ function BillingSection() {
 
 /* ── Main Settings View ── */
 export default function SettingsView() {
-  const [activeNav, setActiveNav] = useState("Tools & Capabilities");
+  const [activeNav, setActiveNav] = useState("Profile");
 
   /* Live integrations from the backend registry */
   const { data: integrations, isLoading: integrationsLoading, isError: integrationsError } = useIntegrations();
@@ -396,6 +401,9 @@ export default function SettingsView() {
         <div>
           {/* Profile Section — live (Supabase identity + /me) */}
           {activeNav === "Profile" && <ProfileSection />}
+
+          {/* My Activity — the account hub embedded as a settings tab */}
+          {activeNav === "My Activity" && <AccountView />}
 
           {/* Tools Section — live integration registry */}
           {activeNav === "Tools & Capabilities" && (

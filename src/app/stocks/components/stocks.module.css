@@ -455,11 +455,11 @@
 .reportsCol { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 
 /* Boxed panels */
-.reportsBox, .announceBox {
+.reportsBox {
   border: 1px solid var(--line); border-radius: var(--radius-xl);
   background: var(--bg-elev); box-shadow: var(--shadow-sm);
+  display: flex; flex-direction: column; overflow: hidden;
 }
-.reportsBox { display: flex; flex-direction: column; overflow: hidden; }
 
 .reportsControls {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
@@ -488,6 +488,10 @@
   background: var(--bg-tint); color: var(--ink-mute);
   font-size: 10px; font-weight: 700; letter-spacing: 0.02em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Regulator chip (Announcements pane) — accent-tinted to read as the source. */
+.reportChipReg {
+  background: var(--accent-soft, var(--bg-tint)); color: var(--accent-deep);
 }
 .reportBody { flex: 1; min-width: 0; }
 .reportTitle {
@@ -531,21 +535,3 @@
 .pageBtnActive { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }
 .pageBtnActive:hover { color: var(--text-on-accent); }
 .pageInfo { margin-left: auto; font-size: 11px; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
-
-/* Announcements box — disabled / coming soon (fills its panel height) */
-.announceBox {
-  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  text-align: center; gap: 10px; padding: 32px 20px; min-height: 280px;
-}
-.announceIcon {
-  width: 46px; height: 46px; display: grid; place-items: center;
-  border-radius: var(--radius-lg); background: var(--bg-tint); color: var(--ink-faint);
-}
-.announceIcon svg { width: 24px; height: 24px; }
-.announceTitle { font-family: var(--font-display); font-size: 16px; color: var(--ink-soft); }
-.announceText { font-size: 12px; color: var(--ink-mute); max-width: 30ch; }
-.announceSoon {
-  padding: 2px 8px; border-radius: 999px; background: var(--bg-sunken);
-  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--ink-faint);
-}

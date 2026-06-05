@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { type IntentConfig, type IntentType } from "@/lib/mockData";
 import { useAuthUser } from "@/lib/auth/useAuthUser";
+import QuotaNotice from "@/components/QuotaNotice";
 import { useToast } from "@/components/Toast";
 import type { Citation } from "@/lib/api/chat";
 import type {
@@ -1500,6 +1501,8 @@ export default function ChatLayout({
 
           <div ref={messagesEndRef} />
         </div>
+
+        <QuotaNotice />
 
         {/* Composer — Lakshya mockup pattern: textarea + tag chips below + dark send */}
         <div className={styles.composerBar}>

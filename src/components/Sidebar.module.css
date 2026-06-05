@@ -343,6 +343,14 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
+  padding: 4px;
+  margin: -4px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.footerProfile:hover {
+  background: var(--bg-tint);
 }
 
 /* Row 2: action icons (sign in/out, mock toggle, theme). */

@@ -133,6 +133,16 @@ function SignInForm() {
         <p className={styles.note}>
           New here? <Link className={styles.link} href="/sign-up">Create an account</Link>
         </p>
+
+        <div className={styles.divider}>or</div>
+        <button
+          className={styles.guestBtn}
+          type="button"
+          onClick={() => router.push("/dashboard")}
+          disabled={busy}
+        >
+          Continue as guest
+        </button>
       </form>
     </div>
   );

@@ -103,6 +103,16 @@ export default function SignUpPage() {
         <p className={styles.note}>
           Already have an account? <Link className={styles.link} href="/sign-in">Sign in</Link>
         </p>
+
+        <div className={styles.divider}>or</div>
+        <button
+          className={styles.guestBtn}
+          type="button"
+          onClick={() => router.push("/dashboard")}
+          disabled={busy}
+        >
+          Continue as guest
+        </button>
       </form>
     </div>
   );
