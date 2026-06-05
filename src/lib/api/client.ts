@@ -39,13 +39,45 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
   return url.toString();
 }
 
-function defaultHeaders(): HeadersInit {
-  // Until Clerk lands in Slice 3, identify as the dev firm. This header
-  // is read by ``src/core/auth.py`` on the backend.
-  return {
-    "Content-Type": "application/json",
-    "X-Dev-Firm": "QUANTSOFT",
-  };
+/** Stable per-browser id for anonymous (not-signed-in) callers — used by the
+ *  backend only to enforce the guest daily message limit. */
+export function guestId(): string {
+  if (typeof window === "undefined") return "";
+  let id = window.localStorage.getItem("prism.guestId");
+  if (!id) {
+    id =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `g_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    window.localStorage.setItem("prism.guestId", id);
+  }
+  return id;
+}
+
+export async function authHeaders(): Promise<Record<string, string>> {
+  const base: Record<string, string> = { "Content-Type": "application/json" };
+  // Identify the guest browser so the backend can apply the guest daily cap
+  // (harmless when signed in — the server keys on user_id then).
+  const gid = guestId();
+  if (gid) base["X-Guest-Id"] = gid;
+  // Auth OFF (default): identify as the dev firm via the header the backend's
+  // get_current_principal reads. Behaviour unchanged from before auth landed.
+  if (!config.authEnabled) {
+    base["X-Dev-Firm"] = "QUANTSOFT";
+    return base;
+  }
+  // Auth ON: attach the Supabase access token; the backend verifies it and
+  // resolves the firm/user from the token (no dev-firm header).
+  if (typeof window === "undefined") return base;
+  try {
+    const { getBrowserSupabase } = await import("@/lib/supabase/client");
+    const { data } = await getBrowserSupabase().auth.getSession();
+    const token = data.session?.access_token;
+    if (token) base["Authorization"] = `Bearer ${token}`;
+  } catch {
+    // No session yet / client not ready → send unauthenticated (server decides).
+  }
+  return base;
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -69,7 +101,7 @@ export const apiClient = {
   async get<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     const response = await fetch(buildUrl(path, opts.query), {
       method: "GET",
-      headers: defaultHeaders(),
+      headers: await authHeaders(),
       signal: opts.signal,
     });
     return handleResponse<T>(response);
@@ -78,7 +110,7 @@ export const apiClient = {
   async post<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     const response = await fetch(buildUrl(path, opts.query), {
       method: "POST",
-      headers: defaultHeaders(),
+      headers: await authHeaders(),
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
       signal: opts.signal,
     });
@@ -88,7 +120,17 @@ export const apiClient = {
   async put<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     const response = await fetch(buildUrl(path, opts.query), {
       method: "PUT",
-      headers: defaultHeaders(),
+      headers: await authHeaders(),
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      signal: opts.signal,
+    });
+    return handleResponse<T>(response);
+  },
+
+  async patch<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+    const response = await fetch(buildUrl(path, opts.query), {
+      method: "PATCH",
+      headers: await authHeaders(),
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
       signal: opts.signal,
     });
@@ -98,7 +140,7 @@ export const apiClient = {
   async delete<T = void>(path: string, opts: RequestOptions = {}): Promise<T> {
     const response = await fetch(buildUrl(path, opts.query), {
       method: "DELETE",
-      headers: defaultHeaders(),
+      headers: await authHeaders(),
       signal: opts.signal,
     });
     // 204 No Content (the common delete success) has no body to parse.

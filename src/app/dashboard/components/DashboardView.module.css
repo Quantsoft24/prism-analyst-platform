@@ -252,6 +252,18 @@
   border-bottom: none;
 }
 
+.activityClickable {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+.activityClickable:hover {
+  background: var(--bg-tint);
+}
+.activityClickable:hover .activityTitle {
+  color: var(--accent);
+}
+
 .activityDot {
   width: 8px;
   height: 8px;

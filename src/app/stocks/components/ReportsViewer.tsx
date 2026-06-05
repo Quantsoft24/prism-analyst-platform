@@ -3,8 +3,15 @@
 import * as React from "react";
 
 import {
+  ANNOUNCEMENT_CATEGORIES,
+  ANNOUNCEMENT_WINDOWS,
+  REGULATORS,
   REPORT_CATEGORIES,
+  useAnnouncements,
   useReports,
+  type Announcement,
+  type AnnouncementCategory,
+  type Regulator,
   type ReportCategory,
   type ReportFiling,
 } from "@/lib/api/stocks";
@@ -32,10 +39,12 @@ interface ReportsViewerProps {
 /**
  * Two independent 50/50 panels stacked below Annual Financials:
  *  • "Reports Viewer" — a category picker + a boxed, scrollable filings list
- *    with numbered pagination (each filing opens its PDF in a new tab).
- *  • "Announcements" — a boxed "coming soon" placeholder (no API yet).
- * Filings come from the stock-chat service via the same-origin `/filings-svc`
- * rewrite (see next.config.ts) — no CORS / mixed-content in production.
+ *    with numbered pagination (each filing opens its PDF in a new tab). Backed
+ *    by the stock-chat service via PRISM's `/api/v1/stocks/reports` proxy.
+ *  • "Announcements" — company-scoped regulatory filings (RBI/SEBI/BSE/NSE/PIB)
+ *    with Category / Regulator / Time-window filters, backed by the prism-filings
+ *    service via PRISM's `/api/v1/stocks/announcements` proxy.
+ * Both go through PRISM's backend — no CORS / mixed-content in the browser.
  */
 export default function ReportsViewer({ company }: ReportsViewerProps) {
   const [category, setCategory] = React.useState<ReportCategory>("Annual Report");
@@ -109,25 +118,164 @@ export default function ReportsViewer({ company }: ReportsViewerProps) {
         </div>
       </div>
 
-      {/* ── Announcements panel (disabled — coming soon) ── */}
-      <div className={styles.reportsCol}>
-        <div className={styles.dashSectionHead}>
-          <h2 className={styles.dashSectionTitle}>Announcements</h2>
-        </div>
-        <div className={styles.announceBox}>
-          <div className={styles.announceIcon}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-              <path d="M3 11l18-5v12L3 14v-3z" />
-              <path d="M11.6 16.8a3 3 0 0 1-5.8-1.1V14" />
-            </svg>
-          </div>
-          <div className={styles.announceTitle}>Announcements</div>
-          <div className={styles.announceText}>
-            Corporate announcements &amp; financial filings will appear here.
-          </div>
-          <span className={styles.announceSoon}>Coming soon</span>
-        </div>
+      {/* ── Announcements panel (company-scoped regulatory filings) ── */}
+      <AnnouncementsPanel company={company} />
+    </div>
+  );
+}
+
+/* ── Announcements: filters + boxed scrollable list + pager ─────────────────── */
+const CATEGORY_OPTS = [
+  { value: "", label: "All categories" },
+  ...ANNOUNCEMENT_CATEGORIES.map((c) => ({ value: c, label: c })),
+];
+const REGULATOR_OPTS = [
+  { value: "", label: "All regulators" },
+  ...REGULATORS.map((r) => ({ value: r, label: r })),
+];
+const WINDOW_OPTS = ANNOUNCEMENT_WINDOWS.map((w) => ({ value: String(w.hours), label: w.label }));
+const DEFAULT_HOURS = 720;
+
+function AnnouncementsPanel({ company }: { company: string | null }) {
+  const [category, setCategory] = React.useState<"" | AnnouncementCategory>("");
+  const [regulator, setRegulator] = React.useState<"" | Regulator>("");
+  const [hours, setHours] = React.useState(DEFAULT_HOURS);
+  const [page, setPage] = React.useState(1);
+
+  const filters = React.useMemo(
+    () => ({
+      hours,
+      ...(regulator ? { regulator } : {}),
+      ...(category ? { filingType: category } : {}),
+    }),
+    [hours, regulator, category],
+  );
+
+  // Restart paging whenever the company or any filter changes.
+  React.useEffect(() => setPage(1), [company, category, regulator, hours]);
+
+  const { data, isLoading, isError, error, isFetching } = useAnnouncements(
+    company,
+    filters,
+    page,
+    PAGE,
+  );
+  const filings = data?.filings ?? [];
+  const total = data?.meta.total_results ?? 0;
+  const totalPages = Math.max(1, data?.meta.total_pages ?? 1);
+  const windowLabel = ANNOUNCEMENT_WINDOWS.find((w) => w.hours === hours)?.label ?? "30 days";
+
+  return (
+    <div className={styles.reportsCol}>
+      <div className={styles.dashSectionHead}>
+        <h2 className={styles.dashSectionTitle}>Announcements</h2>
       </div>
+
+      <div className={styles.reportsBox}>
+        <div className={styles.reportsControls}>
+          <Dropdown
+            value={category}
+            options={CATEGORY_OPTS}
+            onChange={(v) => setCategory(v as "" | AnnouncementCategory)}
+            ariaLabel="Announcement category"
+            minWidth={168}
+          />
+          <Dropdown
+            value={regulator}
+            options={REGULATOR_OPTS}
+            onChange={(v) => setRegulator(v as "" | Regulator)}
+            ariaLabel="Regulator"
+            minWidth={132}
+          />
+          <Dropdown
+            value={String(hours)}
+            options={WINDOW_OPTS}
+            onChange={(v) => setHours(Number(v))}
+            ariaLabel="Time window"
+            minWidth={104}
+          />
+          {data && (
+            <span className={styles.reportsCount}>
+              {total.toLocaleString()} {total === 1 ? "filing" : "filings"}
+              {isFetching ? " · updating…" : ""}
+            </span>
+          )}
+        </div>
+
+        <div className={styles.reportsScroll}>
+          {isLoading ? (
+            <div className={styles.reportsList}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className={styles.reportSkeleton} />
+              ))}
+            </div>
+          ) : isError ? (
+            <div className={styles.reportsEmpty}>
+              Couldn&apos;t load announcements: {error?.message ?? "unknown error"}.
+            </div>
+          ) : filings.length === 0 ? (
+            <div className={styles.reportsEmpty}>
+              No announcements for {company ?? "this company"} in the last {windowLabel}.
+            </div>
+          ) : (
+            <div className={styles.reportsList}>
+              {filings.map((f, i) => (
+                <AnnouncementRow key={`${f.link}-${i}`} filing={f} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {totalPages > 1 && (
+          <Pager page={page} totalPages={totalPages} disabled={isFetching} onGo={setPage} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** "2026-06-05 13:30:00 IST" → "5 Jun 2026". */
+function fmtIst(s: string): string {
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return s;
+  const [, y, mo, d] = m;
+  return `${Number(d)} ${MONTHS[Number(mo) - 1]} ${y}`;
+}
+
+function AnnouncementRow({ filing }: { filing: Announcement }) {
+  const title = filing.title?.trim() || "Filing";
+  const descRaw = filing.description?.trim() ?? "";
+  const desc = descRaw && descRaw !== title ? descRaw : "";
+  const category = filing.filing_types?.[0];
+
+  return (
+    <div className={styles.reportItem}>
+      <div className={styles.reportMeta}>
+        <span className={styles.reportDate}>{fmtIst(filing.published_ist)}</span>
+        <span className={cn(styles.reportChip, styles.reportChipReg)}>{filing.regulator}</span>
+        {category && <span className={styles.reportChip}>{category}</span>}
+      </div>
+      <div className={styles.reportBody}>
+        <div className={styles.reportTitle} title={title}>{title}</div>
+        {desc && <div className={styles.reportDesc} title={desc}>{desc}</div>}
+      </div>
+      {filing.link ? (
+        <a
+          className={styles.reportLink}
+          href={filing.link}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Open
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+        </a>
+      ) : (
+        <span className={styles.reportNoLink}>No link</span>
+      )}
     </div>
   );
 }

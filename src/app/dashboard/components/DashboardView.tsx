@@ -1,10 +1,28 @@
 "use client";
 
-import { MOCK_USER, MOCK_STATS, MOCK_WATCHLIST, MOCK_ACTIVITY, MOCK_TOOLS, type StatItem, type WatchlistItem, type ActivityItem, type ToolItem } from "@/lib/mockData";
+import Link from "next/link";
+
+import { MOCK_STATS, MOCK_TOOLS, type StatItem, type ToolItem } from "@/lib/mockData";
+import { config } from "@/lib/config";
+import { useAuthUser } from "@/lib/auth/useAuthUser";
+import { useRecentConversations } from "@/lib/api/conversations";
+import { useUsage } from "@/lib/api/me";
+import { useWatchlist } from "@/hooks/useWatchlist";
+import { useChatActions } from "@/components/ChatProvider";
 import styles from "./DashboardView.module.css";
+
+function fmtNum(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`;
+  return String(n);
+}
 
 /* ── Hero Section ── */
 function HeroCard({ onQuickPrompt }: { onQuickPrompt: (q: string) => void }) {
+  const auth = useAuthUser();
+  const firstName = (auth.name || "").split(" ")[0];
+  // Show the name only for a real signed-in user (or dev mock); not "Guest".
+  const greetName = auth.isSignedIn || !auth.authEnabled ? firstName : "";
   const prompts = [
     "Summarise Reliance Q4 filing",
     "Compare HDFC vs ICICI margins",
@@ -20,7 +38,7 @@ function HeroCard({ onQuickPrompt }: { onQuickPrompt: (q: string) => void }) {
     <div className={styles.hero}>
       <div className={styles.heroEyebrow}>— {dayName} · {dateStr}</div>
       <h1 className={styles.heroTitle}>
-        Good morning, {MOCK_USER.name.split(" ")[0]}.<br />
+        Good morning{greetName ? `, ${greetName}` : ""}.<br />
         <em>Three filings</em> dropped overnight on your watchlist.
       </h1>
       <p className={styles.heroDesc}>
@@ -55,44 +73,119 @@ function StatCard({ stat }: { stat: StatItem }) {
   );
 }
 
-/* ── Watchlist Row ── */
-function WatchlistRow({ item, onClick }: { item: WatchlistItem; onClick: () => void }) {
+/* ── Stats row (real usage from /me/usage; dev → mock) ── */
+function StatsRow() {
+  const usage = useUsage();
+  const u = usage.data;
+  const stats: StatItem[] = config.authEnabled
+    ? [
+        {
+          title: "Conversations",
+          value: u ? u.conversations.toLocaleString() : "—",
+          delta: u ? `${u.runs_7d} this week` : "",
+          deltaType: "pos",
+          context: "Your research sessions",
+          link: "",
+        },
+        {
+          title: "Tool calls",
+          value: u ? u.tool_calls.toLocaleString() : "—",
+          delta: u ? `${u.runs.toLocaleString()} runs` : "",
+          deltaType: "pos",
+          context: "Across all your runs",
+          link: "",
+        },
+        {
+          title: "Tokens used",
+          value: u ? fmtNum(u.input_tokens + u.output_tokens) : "—",
+          delta: u ? (u.cost_usd > 0 ? `$${u.cost_usd.toFixed(2)}` : "free tier") : "",
+          deltaType: "pos",
+          context: "Input + output",
+          link: "",
+        },
+      ]
+    : MOCK_STATS;
+
   return (
-    <div className={styles.watchlistRow} onClick={onClick}>
-      <div className={styles.tickerLogo}>{item.name.charAt(0)}</div>
-      <div>
-        <div className={styles.tickerName}>{item.name}</div>
-        <div className={styles.tickerSymbol}>{item.exchange}: {item.symbol}</div>
-      </div>
-      <div className={styles.tickerPrice}>{item.price}</div>
-      <div className={item.trend === "up" ? styles.tickerDeltaPos : styles.tickerDeltaNeg}>
-        {item.delta}
-      </div>
-      <svg className={styles.spark} viewBox="0 0 60 24">
-        <polyline
-          fill="none"
-          stroke={item.trend === "up" ? "var(--pos)" : "var(--neg)"}
-          strokeWidth="1.5"
-          points={item.sparkPoints}
-        />
-      </svg>
+    <div className={styles.grid3}>
+      {stats.map((s, i) => (
+        <StatCard key={i} stat={s} />
+      ))}
     </div>
   );
 }
 
-/* ── Activity Item ── */
-function ActivityRow({ item }: { item: ActivityItem }) {
-  const dotColor = `var(--${item.color})`;
+/* ── Tracked companies (real — the user's news watchlist) ── */
+function TrackedCompaniesCard({ onQuickPrompt }: { onQuickPrompt: (q: string) => void }) {
+  const { watchlist } = useWatchlist();
   return (
-    <div className={styles.activityItem}>
-      <div className={styles.activityDot} style={{ background: dotColor }} />
-      <div className={styles.activityContent}>
-        <div className={styles.activityTitle}>{item.title}</div>
-        <div className={styles.activityMeta}>
-          <span>{item.time}</span>
-          <span className={styles.activityTag}>{item.tag}</span>
-        </div>
+    <div className={styles.card}>
+      <div className={styles.cardHeader}>
+        <span className={styles.cardTitle}>Your tracked companies</span>
+        <Link className={styles.cardLink} href="/news">Manage →</Link>
       </div>
+      {watchlist.length === 0 && (
+        <div className={styles.activityItem}>
+          <div className={styles.activityContent}>
+            <div className={styles.activityTitle}>No companies tracked yet</div>
+            <div className={styles.activityMeta}><span>Track some on the News page</span></div>
+          </div>
+        </div>
+      )}
+      {watchlist.slice(0, 6).map((name) => (
+        <div
+          key={name}
+          className={`${styles.activityItem} ${styles.activityClickable}`}
+          role="button"
+          tabIndex={0}
+          onClick={() => onQuickPrompt(`Give me a deep-dive on ${name}`)}
+        >
+          <div className={styles.tickerLogo}>{name.charAt(0)}</div>
+          <div className={styles.activityContent}>
+            <div className={styles.activityTitle}>{name}</div>
+            <div className={styles.activityMeta}><span>Research →</span></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Recent conversations (real — the user's chat history) ── */
+function RecentActivityCard() {
+  const recents = useRecentConversations();
+  const { sendRecent } = useChatActions();
+  const items = recents.items.slice(0, 5);
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardHeader}>
+        <span className={styles.cardTitle}>Recent conversations</span>
+        <Link className={styles.cardLink} href="/account">All →</Link>
+      </div>
+      {recents.loading && <div className={styles.activityItem}>Loading…</div>}
+      {!recents.loading && items.length === 0 && (
+        <div className={styles.activityItem}>
+          <div className={styles.activityContent}>
+            <div className={styles.activityTitle}>No conversations yet</div>
+            <div className={styles.activityMeta}><span>Start one in Research Chat</span></div>
+          </div>
+        </div>
+      )}
+      {items.map((c) => (
+        <div
+          key={c.id}
+          className={`${styles.activityItem} ${styles.activityClickable}`}
+          role="button"
+          tabIndex={0}
+          onClick={() => sendRecent(c.id)}
+        >
+          <div className={styles.activityDot} style={{ background: "var(--accent)" }} />
+          <div className={styles.activityContent}>
+            <div className={styles.activityTitle}>{c.label}</div>
+            <div className={styles.activityMeta}><span>Open →</span></div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -161,33 +254,12 @@ export default function DashboardView({ onQuickPrompt }: DashboardViewProps) {
       <HeroCard onQuickPrompt={onQuickPrompt} />
 
       {/* Stats Row */}
-      <div className={styles.grid3}>
-        {MOCK_STATS.map((s, i) => (
-          <StatCard key={i} stat={s} />
-        ))}
-      </div>
+      <StatsRow />
 
-      {/* Watchlist + Activity */}
+      {/* Tracked companies + Recent conversations */}
       <div className={styles.grid2}>
-        <div className={styles.card}>
-          <div className={styles.cardHeader}>
-            <span className={styles.cardTitle}>Watchlist · India</span>
-            <a className={styles.cardLink}>Manage →</a>
-          </div>
-          {MOCK_WATCHLIST.map((w, i) => (
-            <WatchlistRow key={i} item={w} onClick={() => onQuickPrompt(`Give me a deep-dive on ${w.name}`)} />
-          ))}
-        </div>
-
-        <div className={styles.card}>
-          <div className={styles.cardHeader}>
-            <span className={styles.cardTitle}>Recent activity</span>
-            <a className={styles.cardLink}>All →</a>
-          </div>
-          {MOCK_ACTIVITY.map((a, i) => (
-            <ActivityRow key={i} item={a} />
-          ))}
-        </div>
+        <TrackedCompaniesCard onQuickPrompt={onQuickPrompt} />
+        <RecentActivityCard />
       </div>
 
       {/* Tools Grid */}

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { MOCK_SUGGESTIONS } from "@/lib/mockData";
+import QuotaNotice from "@/components/QuotaNotice";
 import styles from "./AskScreen.module.css";
 
 interface AskScreenProps {
@@ -121,6 +122,7 @@ export default function AskScreen({ onSend }: AskScreenProps) {
             </button>
           </div>
         </div>
+        <QuotaNotice />
       </div>
 
       <div className={styles.suggestions}>

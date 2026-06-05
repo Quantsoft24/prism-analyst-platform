@@ -5,7 +5,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { cn } from "@/lib/utils";
-import { MOCK_USER, type IntentConfig, type IntentType } from "@/lib/mockData";
+import { type IntentConfig, type IntentType } from "@/lib/mockData";
+import { useAuthUser } from "@/lib/auth/useAuthUser";
+import QuotaNotice from "@/components/QuotaNotice";
 import { useToast } from "@/components/Toast";
 import type { Citation } from "@/lib/api/chat";
 import type {
@@ -1115,6 +1117,9 @@ export default function ChatLayout({
   onStop,
   onRetry,
 }: ChatLayoutProps) {
+  const authUser = useAuthUser();
+  const userFirstName = (authUser.name || "You").split(" ")[0];
+  const userInitial = (authUser.initials || "Y").charAt(0);
   const [followUpText, setFollowUpText] = useState("");
   const [mobilePane, setMobilePane] = useState<"chat" | "workspace">("chat");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1348,9 +1353,9 @@ export default function ChatLayout({
                 <div key={mi} className={styles.msgUser}>
                   <div className={styles.msgRole}>
                     <div className={styles.msgRoleIconUser}>
-                      {MOCK_USER.initials.charAt(0)}
+                      {userInitial}
                     </div>
-                    {MOCK_USER.name.split(" ")[0]} · just now
+                    {userFirstName} · just now
                   </div>
                   <div className={styles.msgUserBody}>{msg.text}</div>
                 </div>
@@ -1496,6 +1501,8 @@ export default function ChatLayout({
 
           <div ref={messagesEndRef} />
         </div>
+
+        <QuotaNotice />
 
         {/* Composer — Lakshya mockup pattern: textarea + tag chips below + dark send */}
         <div className={styles.composerBar}>

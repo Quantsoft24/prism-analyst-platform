@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { useChat } from "@/hooks/useChat";
 import { useToast } from "@/components/Toast";
+import { isMockModeEnabled } from "@/lib/api/chat";
 import { RECENT_CHAT_QUERIES } from "@/lib/mockData";
 
 /** Recognize `@bmc TICKER` / "business model canvas of TICKER" in a query.
@@ -52,7 +53,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // These are stable across renders (useChat memoises them), so the actions
   // below stay stable too.
-  const { send, reset } = chat;
+  const { send, reset, loadConversation } = chat;
 
   const sendQuery = React.useCallback(
     (query: string) => {
@@ -77,13 +78,21 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const sendRecent = React.useCallback(
     (id: string) => {
-      const query = RECENT_CHAT_QUERIES[id];
-      if (!query) return;
-      send(query);
+      // MOCK mode: `id` is a sample-chat id → re-run its canned query.
+      if (isMockModeEnabled()) {
+        const query = RECENT_CHAT_QUERIES[id];
+        if (!query) return;
+        send(query);
+        router.push("/chat");
+        toast("Resuming research…", "info");
+        return;
+      }
+      // Real mode: `id` is a session_id → replay & resume the conversation.
+      void loadConversation(id).catch(() => toast("Couldn't open that conversation.", "error"));
       router.push("/chat");
-      toast("Resuming research…", "info");
+      toast("Opening conversation…", "info");
     },
-    [send, router, toast],
+    [send, loadConversation, router, toast],
   );
 
   const openReport = React.useCallback(

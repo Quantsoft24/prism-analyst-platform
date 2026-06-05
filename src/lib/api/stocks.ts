@@ -107,6 +107,66 @@ export interface ReportFiling {
   pdf_link: string | null;
 }
 
+// Announcements (regulatory filings) — from the prism-filings service via the
+// `/api/v1/stocks/announcements` proxy. Company-scoped, cross-regulator.
+export const REGULATORS = ["RBI", "SEBI", "BSE", "NSE", "PIB"] as const;
+export type Regulator = (typeof REGULATORS)[number];
+
+/** The 23 prism-filings categories (the `filing_type` param). */
+export const ANNOUNCEMENT_CATEGORIES = [
+  "Result", "Board Meeting", "AGM/EGM", "Corp Action", "Dividend",
+  "Annual Report", "Insider Trading", "M&A", "IPO", "Listing", "Allotment",
+  "Guidance", "Rating/Target", "Regulatory Penalty", "Policy/Circular",
+  "Auction/Issuance", "Voting Results", "Shareholding Pattern", "BRSR",
+  "Corporate Governance", "Investor Complaints", "Related Party", "Compliance",
+  "Share Transfer", "Deviation", "Unitholding",
+] as const;
+export type AnnouncementCategory = (typeof ANNOUNCEMENT_CATEGORIES)[number];
+
+/** Selectable lookback windows (API caps `hours` at 720 = 30d). */
+export const ANNOUNCEMENT_WINDOWS = [
+  { label: "7 days", hours: 168 },
+  { label: "14 days", hours: 336 },
+  { label: "30 days", hours: 720 },
+] as const;
+
+/** One filing from prism-filings (shape differs from the left pane's `ReportFiling`). */
+export interface Announcement {
+  title: string;
+  description: string;
+  source: string;
+  regulator: string;
+  published_ist: string;
+  published_dt: string;
+  link: string;
+  filing_types: string[];
+  company: string | null;
+  sector: string | null;
+  industry: string | null;
+  scrip_code: string | null;
+  company_tag_method: string | null;
+}
+
+/** Upstream prism-filings response (we read `meta` + `filings`). */
+export interface AnnouncementsResponse {
+  success?: boolean;
+  meta: {
+    total_results: number;
+    returned: number;
+    total_pages: number;
+    current_page: number;
+    last_fetch_ist?: string;
+    data_age_min?: number;
+  };
+  filings: Announcement[];
+}
+
+export interface AnnouncementFilters {
+  regulator?: Regulator;
+  filingType?: AnnouncementCategory;
+  hours: number;
+}
+
 export interface ReportsResponse {
   company: string;
   resolved_company: string | null;
@@ -192,6 +252,26 @@ export const stocksApi = {
       signal,
     });
   },
+  /** Company-scoped regulatory announcements — via the `/announcements` proxy. */
+  announcements(
+    company: string,
+    filters: AnnouncementFilters,
+    page: number,
+    limit: number,
+    signal?: AbortSignal,
+  ): Promise<AnnouncementsResponse> {
+    return apiClient.get<AnnouncementsResponse>(`${base}/announcements`, {
+      query: {
+        company,
+        hours: filters.hours,
+        page,
+        limit,
+        ...(filters.regulator ? { regulator: filters.regulator } : {}),
+        ...(filters.filingType ? { filing_type: filters.filingType } : {}),
+      },
+      signal,
+    });
+  },
 };
 
 export const stocksKeys = {
@@ -205,6 +285,12 @@ export const stocksKeys = {
     ["stocks", "income-statement", securityId, basis] as const,
   reports: (company: string, category: ReportCategory, limit: number, offset: number) =>
     ["stocks", "reports", company, category, limit, offset] as const,
+  announcements: (company: string, filters: AnnouncementFilters, page: number, limit: number) =>
+    [
+      "stocks", "announcements", company,
+      filters.regulator ?? "", filters.filingType ?? "", filters.hours,
+      page, limit,
+    ] as const,
 };
 
 // ── Hooks ─────────────────────────────────────────────────────────────────
@@ -282,6 +368,25 @@ export function useReports(
   return useQuery({
     queryKey: stocksKeys.reports(company ?? "", category, limit, offset),
     queryFn: ({ signal }) => stocksApi.reports(company as string, category, limit, offset, signal),
+    enabled: !!company,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
+    ...options,
+  });
+}
+
+/** A company's regulatory announcements for a filter + page window. */
+export function useAnnouncements(
+  company: string | null,
+  filters: AnnouncementFilters,
+  page: number,
+  limit: number,
+  options?: Omit<UseQueryOptions<AnnouncementsResponse, Error>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: stocksKeys.announcements(company ?? "", filters, page, limit),
+    queryFn: ({ signal }) =>
+      stocksApi.announcements(company as string, filters, page, limit, signal),
     enabled: !!company,
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
