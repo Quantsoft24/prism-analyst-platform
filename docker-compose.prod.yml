@@ -44,6 +44,12 @@ services:
         NEXT_PUBLIC_LIVE_API: "false"
         NEXT_PUBLIC_STREAMING: "false"
         NEXT_PUBLIC_AUTH: "false"
+        # Auth/profile feature (Supabase). The anon key is the PUBLISHABLE key —
+        # public by design (it ships in the browser bundle), safe to commit here,
+        # same as the API URL above. The server-side JWT secret never lives here.
+        NEXT_PUBLIC_AUTH_ENABLED: "true"
+        NEXT_PUBLIC_SUPABASE_URL: https://qtuetulxklviwuafgbyi.supabase.co
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_Yoajcvv-6PmarILbbpgnBg_r8vf7M3b
     container_name: prism-frontend
     restart: unless-stopped
     ports:
