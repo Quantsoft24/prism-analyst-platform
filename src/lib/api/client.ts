@@ -39,13 +39,26 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
   return url.toString();
 }
 
-function defaultHeaders(): HeadersInit {
-  // Until Clerk lands in Slice 3, identify as the dev firm. This header
-  // is read by ``src/core/auth.py`` on the backend.
-  return {
-    "Content-Type": "application/json",
-    "X-Dev-Firm": "QUANTSOFT",
-  };
+export async function authHeaders(): Promise<Record<string, string>> {
+  const base: Record<string, string> = { "Content-Type": "application/json" };
+  // Auth OFF (default): identify as the dev firm via the header the backend's
+  // get_current_principal reads. Behaviour unchanged from before auth landed.
+  if (!config.authEnabled) {
+    base["X-Dev-Firm"] = "QUANTSOFT";
+    return base;
+  }
+  // Auth ON: attach the Supabase access token; the backend verifies it and
+  // resolves the firm/user from the token (no dev-firm header).
+  if (typeof window === "undefined") return base;
+  try {
+    const { getBrowserSupabase } = await import("@/lib/supabase/client");
+    const { data } = await getBrowserSupabase().auth.getSession();
+    const token = data.session?.access_token;
+    if (token) base["Authorization"] = `Bearer ${token}`;
+  } catch {
+    // No session yet / client not ready → send unauthenticated (server decides).
+  }
+  return base;
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -69,7 +82,7 @@ export const apiClient = {
   async get<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     const response = await fetch(buildUrl(path, opts.query), {
       method: "GET",
-      headers: defaultHeaders(),
+      headers: await authHeaders(),
       signal: opts.signal,
     });
     return handleResponse<T>(response);
@@ -78,7 +91,7 @@ export const apiClient = {
   async post<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     const response = await fetch(buildUrl(path, opts.query), {
       method: "POST",
-      headers: defaultHeaders(),
+      headers: await authHeaders(),
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
       signal: opts.signal,
     });
@@ -88,7 +101,17 @@ export const apiClient = {
   async put<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     const response = await fetch(buildUrl(path, opts.query), {
       method: "PUT",
-      headers: defaultHeaders(),
+      headers: await authHeaders(),
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      signal: opts.signal,
+    });
+    return handleResponse<T>(response);
+  },
+
+  async patch<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+    const response = await fetch(buildUrl(path, opts.query), {
+      method: "PATCH",
+      headers: await authHeaders(),
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
       signal: opts.signal,
     });
@@ -98,7 +121,7 @@ export const apiClient = {
   async delete<T = void>(path: string, opts: RequestOptions = {}): Promise<T> {
     const response = await fetch(buildUrl(path, opts.query), {
       method: "DELETE",
-      headers: defaultHeaders(),
+      headers: await authHeaders(),
       signal: opts.signal,
     });
     // 204 No Content (the common delete success) has no body to parse.

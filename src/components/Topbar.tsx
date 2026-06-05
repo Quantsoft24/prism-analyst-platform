@@ -13,6 +13,7 @@ const VIEW_LABELS: Record<NavView, string> = {
   stocks: "Stock Dashboard",
   portfolio: "Portfolio Builder",
   reports: "Reports Library",
+  account: "My Activity",
   settings: "Settings",
 };
 
