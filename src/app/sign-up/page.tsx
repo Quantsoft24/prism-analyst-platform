@@ -9,6 +9,10 @@ import { getBrowserSupabase } from "@/lib/supabase/client";
 
 import styles from "../auth.module.css";
 
+// Flip to true to re-enable "Continue with Google" (configure the Google
+// provider in Supabase first — see the Google OAuth setup steps).
+const GOOGLE_AUTH_ENABLED = false;
+
 /**
  * Sign-up: email/password (+ name) and Google. Supabase sends a verification
  * email if "Confirm email" is on in the dashboard; otherwise the user is signed
@@ -96,9 +100,11 @@ export default function SignUpPage() {
         {msg && <div className={styles.msg}>{msg}</div>}
 
         <button className={styles.primaryBtn} type="submit" disabled={busy}>Create account</button>
-        <button className={styles.googleBtn} type="button" onClick={onGoogle} disabled={busy}>
-          Continue with Google
-        </button>
+        {GOOGLE_AUTH_ENABLED && (
+          <button className={styles.googleBtn} type="button" onClick={onGoogle} disabled={busy}>
+            Continue with Google
+          </button>
+        )}
 
         <p className={styles.note}>
           Already have an account? <Link className={styles.link} href="/sign-in">Sign in</Link>
