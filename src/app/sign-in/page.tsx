@@ -9,6 +9,10 @@ import { getBrowserSupabase } from "@/lib/supabase/client";
 
 import styles from "../auth.module.css";
 
+// Flip to true to re-enable "Continue with Google" (configure the Google
+// provider in Supabase first — see the Google OAuth setup steps).
+const GOOGLE_AUTH_ENABLED = false;
+
 /**
  * Sign-in: email/password + Google + magic link, with a reset-password link.
  * Only meaningful when NEXT_PUBLIC_AUTH_ENABLED=true (otherwise the app has no
@@ -117,9 +121,11 @@ function SignInForm() {
         {msg && <div className={styles.msg}>{msg}</div>}
 
         <button className={styles.primaryBtn} type="submit" disabled={busy}>Sign in</button>
-        <button className={styles.googleBtn} type="button" onClick={onGoogle} disabled={busy}>
-          Continue with Google
-        </button>
+        {GOOGLE_AUTH_ENABLED && (
+          <button className={styles.googleBtn} type="button" onClick={onGoogle} disabled={busy}>
+            Continue with Google
+          </button>
+        )}
 
         <div className={styles.row}>
           <button className={styles.linkBtn} type="button" onClick={onMagicLink} disabled={busy}>
