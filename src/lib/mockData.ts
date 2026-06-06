@@ -13,7 +13,7 @@ export const MOCK_USER = {
 };
 
 /* ── Navigation ── */
-export type NavView = "dashboard" | "chat" | "companies" | "bmc" | "news" | "stocks" | "portfolio" | "reports" | "account" | "settings";
+export type NavView = "dashboard" | "chat" | "companies" | "bmc" | "news" | "stocks" | "regulatory" | "portfolio" | "reports" | "account" | "settings";
 
 export interface NavItem {
   id: NavView;
@@ -29,6 +29,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "bmc", label: "Business Models", icon: "bmc" },
   { id: "news", label: "News & Sentiment", icon: "news" },
   { id: "stocks", label: "Stock Dashboard", icon: "stocks" },
+  { id: "regulatory", label: "Regulatory Lens", icon: "shield" },
   { id: "portfolio", label: "Portfolio Builder", icon: "portfolio" },
   { id: "reports", label: "Reports Library", icon: "reports" },
   // "account" (My Activity) + "settings" live at the bottom of the sidebar
