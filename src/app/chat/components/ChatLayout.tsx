@@ -8,7 +8,9 @@ import { cn } from "@/lib/utils";
 import { type IntentConfig, type IntentType } from "@/lib/mockData";
 import { useAuthUser } from "@/lib/auth/useAuthUser";
 import QuotaNotice from "@/components/QuotaNotice";
+import Drawer from "@/components/Drawer";
 import { useToast } from "@/components/Toast";
+import { toolLabel } from "./toolLabels";
 import type { Citation } from "@/lib/api/chat";
 import type {
   AgentThought,
@@ -174,13 +176,7 @@ function AnswerBlock({
 
   return (
     <div className={styles.answerBlock}>
-      <div
-        className={cn(
-          styles.msgBodyText,
-          shimmer && styles.msgBodyShimmer,
-          styles.answerProse,
-        )}
-      >
+      <div className={cn(styles.msgBodyText, styles.answerProse)}>
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
           {text}
         </ReactMarkdown>
@@ -272,9 +268,9 @@ const NEXT_ACTION_HINTS: Record<string, string> = {
   give_up_gracefully: "Couldn't recover",
 };
 
-/* ── Tool Call card — real input / output / status / freshness ────────── */
+/* ── Tool step — lightweight inline activity row (Claude-style) ────────── */
 
-function ToolCallItem({
+function ToolStep({
   tool,
   expanded,
   onToggle,
@@ -285,47 +281,34 @@ function ToolCallItem({
 }) {
   const isError = tool.status === "error";
   const isRunning = tool.status === "running";
-
-  // Compact status line shown when collapsed.
-  const headerStatus = isRunning
-    ? "running…"
-    : isError
-      ? (tool.error ?? "error")
-      : (tool.result_summary ?? "ok");
+  const label = toolLabel(tool.tool, isError ? "error" : isRunning ? "running" : "done");
 
   return (
     <div
       className={cn(
-        styles.toolCall,
-        expanded && styles.toolCallExpanded,
-        isError && styles.toolCallError,
+        styles.step,
+        isRunning && styles.stepRunning,
+        isError && styles.stepError,
+        expanded && styles.stepExpanded,
       )}
-      onClick={onToggle}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onToggle();
-        }
-      }}
     >
-      <div className={styles.toolCallHeader}>
+      <button
+        type="button"
+        className={styles.stepHeader}
+        onClick={onToggle}
+        aria-expanded={expanded}
+        title={tool.tool}
+      >
         <span
           className={cn(
-            styles.toolCallBadge,
-            isRunning && styles.toolCallBadgeRunning,
-            !isRunning && !isError && styles.toolCallBadgeDone,
-            isError && styles.toolCallBadgeError,
+            styles.stepGlyph,
+            isRunning && styles.stepGlyphRunning,
+            !isRunning && !isError && styles.stepGlyphDone,
+            isError && styles.stepGlyphError,
           )}
           aria-hidden="true"
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={isRunning ? 2 : 2.5}
-          >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={isRunning ? 2 : 2.5}>
             {isRunning ? (
               <path d="M21 12a9 9 0 1 1-6.219-8.56" />
             ) : isError ? (
@@ -338,31 +321,23 @@ function ToolCallItem({
             )}
           </svg>
         </span>
-        <div className={styles.toolCallMeta}>
-          <span className={styles.toolCallName}>
-            {tool.tool}
-            {tool.retry_attempt > 0 && (
-              <span className={styles.toolCallRetry} title="Retried">
-                {" "}
-                ↻{tool.retry_attempt}
-              </span>
-            )}
-          </span>
-          <span className={styles.toolCallStatus}>{headerStatus}</span>
-        </div>
+        <span className={styles.stepLabel}>
+          {label}
+          {tool.retry_attempt > 0 && (
+            <span className={styles.stepRetry} title="Retried">
+              {" "}
+              ↻{tool.retry_attempt}
+            </span>
+          )}
+        </span>
         {tool.freshness && (
-          <span
-            className={styles.freshnessChip}
-            title={`Source: ${tool.freshness.source}`}
-          >
+          <span className={styles.stepFresh} title={`Source: ${tool.freshness.source}`}>
             as of {tool.freshness.as_of ?? "n/a"}
           </span>
         )}
-        <span className={styles.toolCallTime}>
-          {formatLatency(tool.latency_ms)}
-        </span>
+        {!isRunning && <span className={styles.stepTime}>{formatLatency(tool.latency_ms)}</span>}
         <svg
-          className={styles.toolCallChevron}
+          className={cn(styles.stepChevron, expanded && styles.stepChevronOpen)}
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -370,43 +345,43 @@ function ToolCallItem({
         >
           <polyline points="9 18 15 12 9 6" />
         </svg>
-      </div>
+      </button>
+
+      {/* Surface the error on the collapsed row so failures aren't hidden. */}
+      {isError && !expanded && tool.error && (
+        <div className={styles.stepErrorLine}>{tool.error}</div>
+      )}
+
       {expanded && (
-        <div className={styles.toolCallBody}>
-          <div className={styles.toolCallSection}>
-            <span className={styles.toolCallLabel}>Input</span>
-            <span className={styles.toolCallValue}>
+        <div className={styles.stepBody}>
+          <div className={styles.stepField}>
+            <span className={styles.stepFieldLabel}>Input</span>
+            <span className={styles.stepCode}>
               <HighlightedArgs args={tool.args} />
             </span>
           </div>
-          <div className={styles.toolCallSection}>
-            <span className={styles.toolCallLabel}>
-              {isError ? "Error" : "Output"}
-            </span>
+          <div className={styles.stepField}>
+            <span className={styles.stepFieldLabel}>{isError ? "Error" : "Output"}</span>
             {isError ? (
               <div>
-                <span
-                  className={cn(styles.toolCallValue, styles.toolCallCodeError)}
-                >
+                <span className={cn(styles.stepCode, styles.stepCodeError)}>
                   {tool.error ?? "tool failed"}
                 </span>
-                <div style={{ marginTop: 6 }}>
-                  {tool.error_code && (
-                    <span className={styles.errorCodeChip}>
-                      {tool.error_code}
-                    </span>
-                  )}
-                  {tool.next_action && (
-                    <span className={styles.nextActionChip}>
-                      {NEXT_ACTION_HINTS[tool.next_action] ?? tool.next_action}
-                    </span>
-                  )}
-                </div>
+                {(tool.error_code || tool.next_action) && (
+                  <div className={styles.stepErrorChips}>
+                    {tool.error_code && (
+                      <span className={styles.errorCodeChip}>{tool.error_code}</span>
+                    )}
+                    {tool.next_action && (
+                      <span className={styles.nextActionChip}>
+                        {NEXT_ACTION_HINTS[tool.next_action] ?? tool.next_action}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
-              <span className={styles.toolCallValue}>
-                {tool.result_summary ?? "(empty)"}
-              </span>
+              <span className={styles.stepCode}>{tool.result_summary ?? "(empty)"}</span>
             )}
           </div>
         </div>
@@ -475,19 +450,25 @@ function renderJsonValue(v: unknown): React.ReactNode {
 
 /* ── Thinking block — agent's reasoning, collapsible ──────────────────── */
 
-function ThinkingBlock({ thoughts }: { thoughts: AgentThought[] }) {
-  const [open, setOpen] = useState(true);
+function ThinkingBlock({ thoughts, active }: { thoughts: AgentThought[]; active: boolean }) {
+  const [open, setOpen] = useState(active);
+  // Expanded while the agent is thinking; auto-collapse to a one-line summary
+  // once the answer (or tools) take over — click to re-open.
+  useEffect(() => {
+    if (!active) setOpen(false);
+  }, [active]);
   if (thoughts.length === 0) return null;
+  const label = active
+    ? "Thinking…"
+    : `Thought · ${thoughts.length} step${thoughts.length === 1 ? "" : "s"}`;
   return (
-    <div className={styles.thinkingBlock}>
+    <div className={cn(styles.thinkingBlock, active && styles.thinkingActive)}>
       <button
         className={styles.thinkingBlockHeader}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
-        <span>
-          Thinking · {thoughts.length} step{thoughts.length === 1 ? "" : "s"}
-        </span>
+        <span>{label}</span>
         <svg
           className={cn(styles.thinkingChevron, open && styles.thinkingChevronOpen)}
           viewBox="0 0 24 24"
@@ -514,6 +495,95 @@ function ThinkingBlock({ thoughts }: { thoughts: AgentThought[] }) {
   );
 }
 
+/* ── Answer footer — sources toggle + open-report on one row; the expanded
+ *  source list drops full-width below (no horizontal cramming). ─────────── */
+
+function AnswerFooter({
+  citations,
+  tools,
+  showWorkspace,
+  onOpenReport,
+}: {
+  citations: Citation[];
+  tools: ToolCallState[];
+  showWorkspace: boolean;
+  onOpenReport: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const dataSources = tools.filter((t) => t.freshness);
+  const total = citations.length + dataSources.length;
+  if (total === 0 && !showWorkspace) return null;
+  return (
+    <div className={styles.answerFooterBar}>
+      <div className={styles.answerFooterRow}>
+        {total > 0 && (
+          <button
+            type="button"
+            className={cn(styles.footerToggle, open && styles.footerToggleOpen)}
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+            {total} source{total === 1 ? "" : "s"}
+            <svg
+              className={cn(styles.footerChevron, open && styles.footerChevronOpen)}
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        )}
+        {showWorkspace && (
+          <button type="button" className={styles.footerReport} onClick={onOpenReport}>
+            Open report ↗
+          </button>
+        )}
+      </div>
+      {open && total > 0 && (
+        <div className={styles.sourcesList}>
+          {citations.map((c, i) => (
+            <div key={`cite-${i}`} className={styles.sourceRow}>
+              <span className={styles.sourceNum}>{i + 1}</span>
+              <div className={styles.sourceMain}>
+                <div className={styles.sourceTitle}>{c.label}</div>
+                <div className={styles.sourceMeta}>
+                  <span className={styles.sourceKindTag}>{c.source_kind}</span>
+                  {c.as_of && <span>· {c.as_of}</span>}
+                  {c.url && (
+                    <a href={c.url} target="_blank" rel="noreferrer noopener" className={styles.sourceLink}>
+                      · Open ↗
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+          {dataSources.map((t) => (
+            <div key={t.call_id} className={cn(styles.sourceRow, styles.sourceRowData)}>
+              <span className={cn(styles.sourceNum, styles.sourceNumMuted)}>·</span>
+              <div className={styles.sourceMain}>
+                <div className={styles.sourceTitle}>{t.freshness?.source}</div>
+                <div className={styles.sourceMeta}>
+                  <span className={styles.sourceKindTag}>via {toolLabel(t.tool, "done")}</span>
+                  {t.freshness?.as_of && <span>· {t.freshness.as_of}</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Thinking dots (initial placeholder, before the first event) ──────── */
 
 function ThinkingDots() {
@@ -523,6 +593,85 @@ function ThinkingDots() {
       <span className={styles.thinkingDot} />
       <span className={styles.thinkingDot} />
     </span>
+  );
+}
+
+/* ── Agent activity — thinking + tool steps. Live (expanded) while the agent
+ *  works; collapses to a one-line "Worked through N steps" summary once the
+ *  turn is done, so the answer leads and the work recedes (Claude-style). ── */
+
+function AgentActivity({
+  thoughts,
+  tools,
+  active,
+  expandedTools,
+  onToggleTool,
+}: {
+  thoughts: AgentThought[];
+  tools: ToolCallState[];
+  active: boolean;
+  expandedTools: Set<string>;
+  onToggleTool: (id: string) => void;
+}) {
+  const [showSteps, setShowSteps] = useState(active);
+  useEffect(() => {
+    setShowSteps(active);
+  }, [active]);
+
+  const hasThoughts = thoughts.length > 0;
+  const hasTools = tools.length > 0;
+  if (!hasThoughts && !hasTools) return null;
+  const errCount = tools.filter((t) => t.status === "error").length;
+
+  return (
+    <div className={styles.activity}>
+      {hasThoughts && <ThinkingBlock thoughts={thoughts} active={active} />}
+      {hasTools &&
+        (showSteps ? (
+          <>
+            <div className={styles.steps}>
+              {tools.map((tool) => (
+                <ToolStep
+                  key={tool.call_id}
+                  tool={tool}
+                  expanded={expandedTools.has(tool.call_id)}
+                  onToggle={() => onToggleTool(tool.call_id)}
+                />
+              ))}
+            </div>
+            {!active && (
+              <button
+                type="button"
+                className={styles.activityCollapse}
+                onClick={() => setShowSteps(false)}
+              >
+                Hide steps
+              </button>
+            )}
+          </>
+        ) : (
+          <button type="button" className={styles.activitySummary} onClick={() => setShowSteps(true)}>
+            <span className={styles.activitySummaryGlyph}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </span>
+            Worked through {tools.length} step{tools.length === 1 ? "" : "s"}
+            {errCount > 0 ? ` · ${errCount} failed` : ""}
+            <svg
+              className={styles.activitySummaryChevron}
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        ))}
+    </div>
   );
 }
 
@@ -620,31 +769,6 @@ function WorkspacePane({ messages, intentConfig, runMeta }: WorkspacePaneProps) 
             )}
           </button>
         ))}
-        <div className={styles.wsTabsSpacer} />
-        <button
-          type="button"
-          className={styles.wsAction}
-          title="Export as PDF (coming soon)"
-          disabled
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          Export
-        </button>
-        <button
-          type="button"
-          className={styles.wsActionPrimary}
-          title="Save to Reports Library (coming soon)"
-          disabled
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-          </svg>
-          Save
-        </button>
       </div>
 
       {/* ── Tab content ───────────────────────────────────────── */}
@@ -1109,7 +1233,6 @@ function SourcesView({
 export default function ChatLayout({
   messages,
   intentConfig,
-  activeIntent,
   showWorkspace,
   phase,
   runMeta,
@@ -1121,52 +1244,14 @@ export default function ChatLayout({
   const userFirstName = (authUser.name || "You").split(" ")[0];
   const userInitial = (authUser.initials || "Y").charAt(0);
   const [followUpText, setFollowUpText] = useState("");
-  const [mobilePane, setMobilePane] = useState<"chat" | "workspace">("chat");
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  // call_id → expanded? (default: first call open, others closed).
+  // call_id → expanded? Tool steps start collapsed; click to inspect I/O.
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, phase]);
-
-  // Open the first tool call by default whenever a new assistant turn begins.
-  useEffect(() => {
-    const last = messages[messages.length - 1];
-    if (last?.role !== "assistant") return;
-    const first = last.toolCalls?.[0];
-    if (first && !expandedTools.has(first.call_id)) {
-      setExpandedTools((prev) => new Set(prev).add(first.call_id));
-    }
-  }, [messages, expandedTools]);
-
-  // Workspace pane collapse — local pref persisted across reloads.
-  // Symmetric with the left-sidebar collapse pattern.
-  const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
-  useEffect(() => {
-    try {
-      setWorkspaceCollapsed(
-        window.localStorage.getItem("prism.workspaceCollapsed") === "1",
-      );
-    } catch {
-      /* ignore */
-    }
-  }, []);
-  const toggleWorkspace = () => {
-    setWorkspaceCollapsed((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem(
-          "prism.workspaceCollapsed",
-          next ? "1" : "0",
-        );
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  };
-  const workspaceVisible = showWorkspace && !workspaceCollapsed;
 
   const toggleTool = (call_id: string) => {
     setExpandedTools((prev) => {
@@ -1191,259 +1276,144 @@ export default function ChatLayout({
     }
   };
 
-  // Header status: prefer running/done state from phase; show tool count.
-  const lastAssistant = [...messages]
-    .reverse()
-    .find((m) => m.role === "assistant");
-  const toolCount = lastAssistant?.toolCalls?.length ?? 0;
   const isRunning = phase !== "done";
+  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+  const toolCount = lastAssistant?.toolCalls?.length ?? 0;
   const cost = formatTokensCost(runMeta);
 
+  // What is the agent doing right now? — drives the header + composer status.
+  const runningTool = lastAssistant?.toolCalls?.find((t) => t.status === "running");
+  const workingLabel =
+    phase === "thinking"
+      ? "Thinking…"
+      : phase === "tools"
+        ? runningTool
+          ? toolLabel(runningTool.tool, "running")
+          : "Using tools…"
+        : phase === "answering"
+          ? "Writing the answer…"
+          : "Working…";
+
   return (
-    <div
-      className={cn(
-        styles.chatLayout,
-        !workspaceVisible && styles.chatLayoutFull,
-      )}
-    >
-      {/* ── Left: Chat Pane ── */}
-      <div
-        className={cn(
-          styles.chatPane,
-          mobilePane === "workspace" && styles.chatPaneHidden,
-        )}
-      >
-        {/* Header */}
-        <div className={styles.chatHeader}>
-          <div className={styles.chatHeaderMain}>
-            <span className={styles.chatTitle}>{intentConfig.title}</span>
-            <div className={styles.chatStatus}>
+    <div className={styles.chat}>
+      {/* ── Header ── */}
+      <div className={styles.header}>
+        <div className={styles.headerInner}>
+          <div className={styles.headerMain}>
+            <span className={styles.headerTitle}>{intentConfig.title}</span>
+            <div className={styles.headerStatus}>
               {isRunning && <span className={styles.statusPulse} />}
-              {phase === "done"
-                ? `Completed · ${toolCount} tools`
-                : `Live · ${toolCount} tool${toolCount === 1 ? "" : "s"}`}
+              <span>
+                {isRunning
+                  ? workingLabel
+                  : `Done · ${toolCount} tool${toolCount === 1 ? "" : "s"}${cost ? ` · ${cost}` : ""}`}
+              </span>
             </div>
           </div>
-          <div className={styles.chatHeaderActions}>
-            {runMeta.agent_run_id && (
-              <span
-                className={styles.runIdPill}
-                title={`run ${runMeta.agent_run_id}`}
-              >
-                {runMeta.agent_run_id.slice(0, 8)}
-              </span>
-            )}
-            {cost && <span className={styles.runCostPill}>{cost}</span>}
-            {isRunning ? (
-              <button
-                className={styles.stopBtn}
-                onClick={onStop}
-                aria-label="Stop the agent"
-                title="Stop"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
+          <div className={styles.headerActions}>
+            {isRunning && (
+              <button className={styles.stopBtn} onClick={onStop} aria-label="Stop the agent" title="Stop">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                   <rect x="6" y="6" width="12" height="12" rx="2" />
                 </svg>
                 Stop
               </button>
-            ) : null}
-            {/* Workspace pane collapse — symmetric with the left sidebar's
-                chevron. Hidden on mobile (the pane-switcher handles it). */}
+            )}
             {showWorkspace && (
               <button
                 type="button"
-                className={styles.workspaceToggleBtn}
-                onClick={toggleWorkspace}
-                title={
-                  workspaceCollapsed
-                    ? "Open the workspace pane"
-                    : "Collapse the workspace pane"
-                }
-                aria-label={
-                  workspaceCollapsed
-                    ? "Open workspace"
-                    : "Collapse workspace"
-                }
-                aria-expanded={!workspaceCollapsed}
+                className={styles.reportBtn}
+                onClick={() => setDrawerOpen(true)}
+                title="Open the research workspace"
               >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  style={{
-                    transform: workspaceCollapsed ? "rotate(180deg)" : "none",
-                    transition: "transform 200ms ease",
-                  }}
-                >
-                  <polyline points="13 17 18 12 13 7" />
-                  <polyline points="6 17 11 12 6 7" />
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
                 </svg>
+                Report
               </button>
             )}
           </div>
         </div>
+      </div>
 
-        {/* Messages */}
-        <div className={styles.messages}>
-          {/* Mode banner — research mode label + multi-company mode tabs.
-              Compare auto-activates when the intent router (mockData.ts →
-              routeIntent) detects a compare query ("vs", "compare", "peer",
-              "benchmark"). Watchlist is still backend-pending — kept
-              disabled until the multi-ticker streaming path lands. Single
-              is the default for everything else. The user can't manually
-              switch modes today (the router is the single source of
-              truth); a future iteration will add a click-to-override. */}
-          <div className={styles.modeBanner}>
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-            </svg>
-            <span>Research mode</span>
-            <div className={styles.modeBannerTabs}>
-              <button
-                type="button"
-                className={cn(
-                  styles.modeTab,
-                  activeIntent !== "compare" && styles.modeTabActive,
-                )}
-                aria-current={activeIntent !== "compare" ? "true" : undefined}
-              >
-                Single
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  styles.modeTab,
-                  activeIntent === "compare" && styles.modeTabActive,
-                )}
-                aria-current={activeIntent === "compare" ? "true" : undefined}
-                title="Compare mode — auto-detected from queries like 'compare X and Y', 'X vs Y', 'peer benchmark'"
-              >
-                Compare
-              </button>
-              <button
-                type="button"
-                className={styles.modeTab}
-                disabled
-                title="Watchlist mode — coming soon"
-              >
-                Watchlist
-              </button>
-            </div>
-          </div>
-
+      {/* ── Conversation (single centered column) ── */}
+      <div className={styles.scroll}>
+        <div className={styles.thread}>
           {messages.map((msg, mi) => {
             if (msg.role === "user") {
               return (
                 <div key={mi} className={styles.msgUser}>
                   <div className={styles.msgRole}>
-                    <div className={styles.msgRoleIconUser}>
-                      {userInitial}
-                    </div>
-                    {userFirstName} · just now
+                    <div className={styles.msgRoleIconUser}>{userInitial}</div>
+                    {userFirstName}
                   </div>
                   <div className={styles.msgUserBody}>{msg.text}</div>
                 </div>
               );
             }
 
-            /* Assistant message */
-            const showShimmer =
-              mi === messages.length - 1 && phase === "answering";
+            const isLast = mi === messages.length - 1;
+            const streaming = isLast && phase === "answering";
+            const thinkingActive = isLast && (phase === "thinking" || phase === "tools");
+            const citations = msg.structured?.citations ?? [];
+            const tools = msg.toolCalls ?? [];
+
             return (
               <div key={mi} className={styles.msgAssistant}>
                 <div className={styles.msgRole}>
                   <div className={styles.msgRoleIconAssistant}>P</div>
-                  PRISM{" "}
-                  {msg.isThinking && <ThinkingDots />}
-                  {!msg.isThinking && msg.toolCalls && msg.toolCalls.length > 0 && (
-                    <span className={styles.msgRoleInfo}>
-                      · {msg.toolCalls.length} tool
-                      {msg.toolCalls.length === 1 ? "" : "s"}
-                    </span>
-                  )}
+                  PRISM
+                  {msg.isThinking && tools.length === 0 && !msg.thoughts?.length && <ThinkingDots />}
                 </div>
 
-                {/* Visible reasoning (when available) */}
-                {msg.thoughts && msg.thoughts.length > 0 && (
-                  <ThinkingBlock thoughts={msg.thoughts} />
-                )}
+                {/* Inline agent activity: thinking → tool steps (collapses
+                    to a one-line summary once the turn is done) */}
+                <AgentActivity
+                  thoughts={msg.thoughts ?? []}
+                  tools={tools}
+                  active={thinkingActive}
+                  expandedTools={expandedTools}
+                  onToggleTool={toggleTool}
+                />
 
-                {/* Tool calls */}
-                {msg.toolCalls && msg.toolCalls.length > 0 && (
-                  <div className={styles.toolCalls}>
-                    {msg.toolCalls.map((tool) => (
-                      <ToolCallItem
-                        key={tool.call_id}
-                        tool={tool}
-                        expanded={expandedTools.has(tool.call_id)}
-                        onToggle={() => toggleTool(tool.call_id)}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {/* Answer — markdown rendered (GFM tables/lists/code),
-                    with [n] markers turning into hover citation popovers. */}
+                {/* Answer */}
                 {msg.showAnswer && (msg.streamedText || msg.text) && (
-                  <AnswerBlock
-                    text={msg.streamedText || msg.text}
-                    citations={msg.structured?.citations ?? []}
-                    shimmer={showShimmer}
-                    structured={msg.structured ?? null}
-                  />
+                  <>
+                    <AnswerBlock
+                      text={msg.streamedText || msg.text}
+                      citations={citations}
+                      shimmer={streaming}
+                      structured={msg.structured ?? null}
+                    />
+                    {!streaming && (
+                      <AnswerFooter
+                        citations={citations}
+                        tools={tools}
+                        showWorkspace={showWorkspace}
+                        onOpenReport={() => setDrawerOpen(true)}
+                      />
+                    )}
+                  </>
                 )}
 
-                {/* Defensive empty-answer fallback — the backend now
-                    synthesizes a message for this case (see runner's
-                    _synthesize_empty_answer_fallback), but if anything
-                    slips through we still surface SOMETHING. */}
+                {/* Empty-answer fallback */}
                 {phase === "done" &&
                   !msg.error &&
                   !msg.streamedText &&
                   !msg.text &&
-                  msg.toolCalls &&
-                  msg.toolCalls.length > 0 && (
+                  tools.length > 0 && (
                     <div className={styles.errorBlock} role="status">
                       <div className={styles.errorBlockTitle}>
                         The agent finished without writing an answer.
                       </div>
                       <div className={styles.errorBlockMessage}>
-                        {msg.toolCalls.length} tool
-                        {msg.toolCalls.length === 1 ? "" : "s"} ran but the
-                        model returned no text — usually a sign the query was
-                        ambiguous. Try a more specific question (a ticker
-                        like RELIANCE, a fiscal period like FY24, or a
-                        focused sub-question).
+                        {tools.length} tool{tools.length === 1 ? "" : "s"} ran but the model returned
+                        no text — usually a sign the query was ambiguous. Try a more specific question
+                        (a ticker like RELIANCE, a fiscal period like FY24, or a focused sub-question).
                       </div>
-                      <button
-                        className={styles.retryBtn}
-                        onClick={onRetry}
-                        type="button"
-                      >
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
+                      <button className={styles.retryBtn} onClick={onRetry} type="button">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <polyline points="23 4 23 10 17 10" />
                           <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
                         </svg>
@@ -1462,23 +1432,10 @@ export default function ChatLayout({
                           ? "Stopped."
                           : "Something went wrong."}
                     </div>
-                    <div className={styles.errorBlockMessage}>
-                      {msg.error.message}
-                    </div>
+                    <div className={styles.errorBlockMessage}>{msg.error.message}</div>
                     {msg.error.retriable && (
-                      <button
-                        className={styles.retryBtn}
-                        onClick={onRetry}
-                        type="button"
-                      >
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
+                      <button className={styles.retryBtn} onClick={onRetry} type="button">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <polyline points="23 4 23 10 17 10" />
                           <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
                         </svg>
@@ -1488,28 +1445,37 @@ export default function ChatLayout({
                   </div>
                 )}
 
-                {/* Follow-up thinking (no tool calls scheduled yet) */}
-                {msg.isThinking &&
-                  (!msg.toolCalls || msg.toolCalls.length === 0) && (
-                    <div className={styles.msgBodyThinking}>
-                      Looking that up against the current context…
-                    </div>
-                  )}
+                {/* Brief follow-up thinking line (no tools/thoughts yet) */}
+                {msg.isThinking && tools.length === 0 && !msg.thoughts?.length && (
+                  <div className={styles.msgBodyThinking}>
+                    Looking that up against the current context…
+                  </div>
+                )}
               </div>
             );
           })}
 
           <div ref={messagesEndRef} />
         </div>
+      </div>
 
-        <QuotaNotice />
-
-        {/* Composer — Lakshya mockup pattern: textarea + tag chips below + dark send */}
-        <div className={styles.composerBar}>
-          <div className={styles.composerBox}>
+      {/* ── Composer ── */}
+      <div className={styles.composerWrap}>
+        <div className={styles.composerInner}>
+          <QuotaNotice />
+          {isRunning && (
+            <div className={styles.workingRow}>
+              <span className={styles.workingDot} />
+              <span className={styles.workingLabel}>PRISM is working · {workingLabel}</span>
+              <button type="button" className={styles.workingStop} onClick={onStop}>
+                Stop
+              </button>
+            </div>
+          )}
+          <div className={styles.composerField}>
             <textarea
               className={styles.composerTextarea}
-              placeholder="Ask a follow-up… or @-mention a tool"
+              placeholder="Ask a follow-up…"
               value={followUpText}
               onChange={(e) => setFollowUpText(e.target.value)}
               onKeyDown={handleFollowUpKeyDown}
@@ -1517,94 +1483,26 @@ export default function ChatLayout({
               disabled={isRunning}
               rows={1}
             />
-            <div className={styles.composerToolbar}>
-              {/* contextTag chip removed 2026-05-27 — it was hardcoded
-                  to "RELIANCE Q4 FY26" via mockData.INTENT_CONFIGS and
-                  surfaced regardless of actual conversation context.
-                  Bring back as a resolved-ticker pill driven by agent
-                  state when the feature provides real value. */}
-              <span className={styles.composerTag} title="All registered tools available">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" />
-                </svg>
-                All tools
-              </span>
-              <button
-                type="button"
-                className={styles.composerSend}
-                onClick={handleFollowUp}
-                aria-label="Send follow-up"
-                disabled={isRunning || !followUpText.trim()}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <line x1="22" y1="2" x2="11" y2="13" />
-                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                </svg>
-              </button>
-            </div>
+            <button
+              type="button"
+              className={styles.composerSend}
+              onClick={handleFollowUp}
+              aria-label="Send follow-up"
+              disabled={isRunning || !followUpText.trim()}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
           </div>
-        </div>
-
-        {/* Mobile pane switcher */}
-        <div className={styles.paneSwitcher}>
-          <button
-            className={
-              mobilePane === "chat" ? styles.paneSwitcherBtnActive : styles.paneSwitcherBtn
-            }
-            onClick={() => setMobilePane("chat")}
-          >
-            Chat
-          </button>
-          <button
-            className={
-              mobilePane === "workspace"
-                ? styles.paneSwitcherBtnActive
-                : styles.paneSwitcherBtn
-            }
-            onClick={() => setMobilePane("workspace")}
-          >
-            Workspace
-          </button>
         </div>
       </div>
 
-      {/* ── Right: Workspace Pane ── */}
-      {workspaceVisible && (
-        <div
-          className={cn(
-            styles.workspacePane,
-            mobilePane === "workspace" && styles.workspacePaneVisible,
-          )}
-        >
-          <WorkspacePane
-            messages={messages}
-            intentConfig={intentConfig}
-            runMeta={runMeta}
-          />
-          <div className={styles.paneSwitcher}>
-            <button
-              className={
-                mobilePane === "chat"
-                  ? styles.paneSwitcherBtnActive
-                  : styles.paneSwitcherBtn
-              }
-              onClick={() => setMobilePane("chat")}
-            >
-              Chat
-            </button>
-            <button
-              className={
-                mobilePane === "workspace"
-                  ? styles.paneSwitcherBtnActive
-                  : styles.paneSwitcherBtn
-              }
-              onClick={() => setMobilePane("workspace")}
-            >
-              Workspace
-            </button>
-          </div>
-        </div>
-      )}
+      {/* ── Workspace drawer (Report / Charts / Tools / Sources) ── */}
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title="Research workspace">
+        <WorkspacePane messages={messages} intentConfig={intentConfig} runMeta={runMeta} />
+      </Drawer>
     </div>
   );
 }
