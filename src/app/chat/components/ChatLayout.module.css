@@ -444,6 +444,14 @@
   background: var(--accent);
   color: white;
 }
+/* Clickable citation (has a source URL) — underline cue + opens on click. */
+.citeLink {
+  text-decoration: none;
+  box-shadow: inset 0 -1px 0 var(--accent);
+}
+.citeLink:hover {
+  box-shadow: none;
+}
 
 /* ── Composer — Lakshya mockup pattern ──────────────────────────────────
  * .composerBar (border-top, padding) → .composerBox (border, focus-glow) →
@@ -956,26 +964,31 @@
 
 /* Thinking block (agent reasoning) */
 .thinkingBlock {
-  margin: 8px 0 12px;
-  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  border-radius: 8px;
-  background: var(--surface-2, rgba(0, 0, 0, 0.02));
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
 }
 .thinkingBlockHeader {
-  display: flex;
-  width: 100%;
+  display: inline-flex;
+  align-self: flex-start;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 5px 12px;
   font-family: var(--font-body);
   font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted, #6b6b6b);
+  font-weight: 500;
+  color: var(--ink-mute);
   background: none;
-  border: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
   cursor: pointer;
   text-align: left;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.thinkingBlockHeader:hover {
+  color: var(--ink);
+  border-color: var(--ink-faint);
 }
 .thinkingChevron {
   transition: transform 0.15s;
@@ -986,17 +999,20 @@
 .thinkingList {
   list-style: none;
   margin: 0;
-  padding: 4px 12px 10px 12px;
+  padding: 4px 0 4px 14px;
+  border-left: 2px solid var(--line-soft);
   font-family: var(--font-body);
   font-size: 13px;
-  color: var(--text-muted, #6b6b6b);
+  color: var(--ink-mute);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .thinkingItem {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: flex-start;
-  padding: 4px 0;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 .thinkingKind {
   font-family: var(--font-mono);
@@ -1931,12 +1947,86 @@
    AGENTIC REDESIGN — single-column conversation + inline activity + drawer
    ════════════════════════════════════════════════════════════════════════ */
 
+/* Split-screen root: conversation on the left, workspace canvas on the right.
+   When closed it's just the conversation (full width, single column). */
+.chatRoot {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
 .chat {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
   background: var(--bg);
+}
+
+/* ── Workspace canvas — inline split panel (Claude Artifacts-style) ── */
+.workspacePanel {
+  flex-shrink: 0;
+  width: min(560px, 46%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: var(--bg-elev);
+  animation: slideInRight var(--transition-slow);
+}
+.panelHeader {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.panelTitle {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--ink);
+}
+.panelClose {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  color: var(--ink-mute);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.panelClose:hover {
+  color: var(--ink);
+  background: var(--bg-tint);
+}
+.panelBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.panelBackdrop {
+  display: none;
+}
+
+/* Tablet / mobile: can't split a narrow screen → full-screen overlay sheet. */
+@media (max-width: 900px) {
+  .workspacePanel {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    z-index: 80;
+    border-left: none;
+  }
+  .panelBackdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 79;
+    background: rgba(15, 20, 25, 0.32);
+  }
 }
 
 /* ── Header ── */
@@ -2021,10 +2111,12 @@
 .activity {
   display: flex;
   flex-direction: column;
+  align-items: flex-start; /* children hug their content (no full-width bars) */
   gap: var(--space-2);
   margin: var(--space-2) 0 var(--space-3);
 }
 .steps {
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   gap: 2px;

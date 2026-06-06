@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 import { type IntentConfig, type IntentType } from "@/lib/mockData";
 import { useAuthUser } from "@/lib/auth/useAuthUser";
 import QuotaNotice from "@/components/QuotaNotice";
-import Drawer from "@/components/Drawer";
 import { useToast } from "@/components/Toast";
 import { toolLabel } from "./toolLabels";
 import type { Citation } from "@/lib/api/chat";
@@ -53,13 +52,27 @@ function CitationMarker({
 }) {
   return (
     <span className={styles.citeWrap} tabIndex={0}>
-      <span
-        className={styles.cite}
-        aria-describedby={`cite-${index}`}
-        title={citation?.label ?? `Source ${index}`}
-      >
-        {index}
-      </span>
+      {citation?.url ? (
+        // Clickable → opens the original reference in a new tab.
+        <a
+          className={cn(styles.cite, styles.citeLink)}
+          href={citation.url}
+          target="_blank"
+          rel="noreferrer noopener"
+          aria-describedby={`cite-${index}`}
+          title={`Open: ${citation.label}`}
+        >
+          {index}
+        </a>
+      ) : (
+        <span
+          className={styles.cite}
+          aria-describedby={`cite-${index}`}
+          title={citation?.label ?? `Source ${index}`}
+        >
+          {index}
+        </span>
+      )}
       {citation && (
         <span
           id={`cite-${index}`}
@@ -1295,7 +1308,8 @@ export default function ChatLayout({
           : "Working…";
 
   return (
-    <div className={styles.chat}>
+    <div className={cn(styles.chatRoot, drawerOpen && styles.chatRootSplit)}>
+      <div className={styles.chat}>
       {/* ── Header ── */}
       <div className={styles.header}>
         <div className={styles.headerInner}>
@@ -1499,10 +1513,35 @@ export default function ChatLayout({
         </div>
       </div>
 
-      {/* ── Workspace drawer (Report / Charts / Tools / Sources) ── */}
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title="Research workspace">
-        <WorkspacePane messages={messages} intentConfig={intentConfig} runMeta={runMeta} />
-      </Drawer>
+      </div>
+      {/* /.chat */}
+
+      {/* ── Workspace — splits the screen (canvas), inline like Claude's
+          Artifacts; becomes a full-screen sheet on tablet/mobile. ── */}
+      {drawerOpen && (
+        <>
+          <div className={styles.panelBackdrop} onClick={() => setDrawerOpen(false)} />
+          <aside className={styles.workspacePanel} aria-label="Research workspace">
+            <div className={styles.panelHeader}>
+              <span className={styles.panelTitle}>Research workspace</span>
+              <button
+                type="button"
+                className={styles.panelClose}
+                onClick={() => setDrawerOpen(false)}
+                aria-label="Close workspace"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className={styles.panelBody}>
+              <WorkspacePane messages={messages} intentConfig={intentConfig} runMeta={runMeta} />
+            </div>
+          </aside>
+        </>
+      )}
     </div>
   );
 }
