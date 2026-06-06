@@ -9,6 +9,9 @@
  * Scenarios driven by user message content:
  *   • Contains "fail" / "error"          → mid-run tool failure + retry path
  *   • Contains "typo" / "didyou"         → search_companies returns suggestions
+ *   • "clarify" / "compare them" /       → agent asks ONE clarifying question
+ *     "how did they do" / "which is        and stops (no tools) — the
+ *     better" / "analyse the margins"      "ask before you guess" behaviour
  *   • Otherwise                          → comprehensive happy path that
  *                                          exercises every UI surface (thoughts,
  *                                          multiple tools, freshness, structured
@@ -61,12 +64,23 @@ export function setMockMode(on: boolean): void {
 
 /* ── Scenario picker ─────────────────────────────────────────────────── */
 
-type Scenario = "happy" | "fail" | "typo";
+type Scenario = "happy" | "fail" | "typo" | "clarify";
 
 function pickScenario(message: string): Scenario {
   const m = message.toLowerCase();
   if (m.includes("fail") || m.includes("error") || m.includes("crash")) return "fail";
   if (m.includes("typo") || m.includes("didyou") || m.includes("reliac")) return "typo";
+  // Ambiguous requests → the agent asks one clarifying question (no tools).
+  if (
+    m.includes("clarify") ||
+    m.includes("compare them") ||
+    m.includes("how did they do") ||
+    m.includes("which is better") ||
+    m.includes("analyse the margins") ||
+    m.includes("analyze the margins")
+  ) {
+    return "clarify";
+  }
   return "happy";
 }
 
@@ -411,6 +425,43 @@ function typoPath(): Beat[] {
   ];
 }
 
+/** Clarification path — the request is ambiguous, so the agent asks ONE
+ *  focused question and stops (no tools). Mirrors the "ask before you guess"
+ *  rule in the real agent's prompt. Trigger with e.g. "compare them",
+ *  "how did they do?", or any message containing "clarify". */
+function clarifyPath(): Beat[] {
+  const text =
+    `Happy to dig into that — I just want to pull the right numbers rather than guess. Could you clarify:\n\n` +
+    `- **Which company (or companies)?** e.g. TCS, Infosys, Reliance\n` +
+    `- **Which metric?** revenue growth, margins, or share-price return\n` +
+    `- **Over what period?** the latest quarter, FY24, or trailing 1-year\n\n` +
+    `Once you tell me, I'll pull it straight from the filings and live market data.`;
+  return [
+    { delay: 50, event: metaEvent() },
+    {
+      delay: 300,
+      event: thought(
+        "The request is ambiguous — no company, metric, or period is specified. Per 'ask before you guess', I'll ask one focused question instead of burning tools.",
+        "plan",
+      ),
+    },
+    ...streamText(text, 55),
+    {
+      delay: 200,
+      event: {
+        type: "final",
+        answer: "Awaiting user clarification.",
+        structured: null,
+        agent_run_id: "mock-clarify",
+        cost_usd: 0,
+        input_tokens: 210,
+        output_tokens: 72,
+        latency_ms: 1400,
+      } as FinalEvent,
+    },
+  ];
+}
+
 /** Convert a long string into a series of token events (~chunk_size chars each). */
 function streamText(text: string, chunkSize = 100): Beat[] {
   const beats: Beat[] = [];
@@ -438,7 +489,13 @@ export function runMockChatStream(
   let aborted = false;
   const scenario = pickScenario(request.message);
   const beats =
-    scenario === "fail" ? failPath() : scenario === "typo" ? typoPath() : happyPath();
+    scenario === "fail"
+      ? failPath()
+      : scenario === "typo"
+        ? typoPath()
+        : scenario === "clarify"
+          ? clarifyPath()
+          : happyPath();
 
   const done = (async (): Promise<FinalEvent | ErrorEvent | null> => {
     let terminal: FinalEvent | ErrorEvent | null = null;

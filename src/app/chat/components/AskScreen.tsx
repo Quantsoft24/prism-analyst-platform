@@ -9,8 +9,6 @@ interface AskScreenProps {
   onSend: (query: string) => void;
 }
 
-const MODES = ["Single", "Compare", "Watchlist"];
-
 /** Icon for each suggestion card — keyed by the suggestion's ``icon``
  * field in mockData. Matches the Lakshya mockup's ``ask-sug-icon`` SVGs:
  * report (file), compare (bars), bar-chart (model), filter (screen). */
@@ -43,7 +41,6 @@ const SUGGESTION_ICONS: Record<string, React.ReactNode> = {
 
 export default function AskScreen({ onSend }: AskScreenProps) {
   const [query, setQuery] = useState("");
-  const [activeMode, setActiveMode] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -148,14 +145,6 @@ export default function AskScreen({ onSend }: AskScreenProps) {
               <span className={styles.suggestionText}>{s.text}</span>
             </span>
           </div>
-        ))}
-      </div>
-
-      <div className={styles.modeTabs}>
-        {MODES.map((m, i) => (
-          <button key={m} className={i === activeMode ? styles.modeTabActive : styles.modeTab} onClick={() => setActiveMode(i)}>
-            {m}
-          </button>
         ))}
       </div>
     </div>
