@@ -490,6 +490,14 @@
   min-height: 40px;
   line-height: 1.5;
 }
+/* The composer box shows focus via its `:focus-within` ring, so the textarea
+   must not draw its own outline. Higher specificity than the global
+   `:focus-visible` reset (globals.css) so it wins regardless of dev-vs-prod CSS
+   source ordering — otherwise a stray rectangle shows only in production. */
+.composerTextarea:focus,
+.composerTextarea:focus-visible {
+  outline: none;
+}
 .composerTextarea::placeholder {
   color: var(--ink-mute);
 }

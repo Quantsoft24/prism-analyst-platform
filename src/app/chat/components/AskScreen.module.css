@@ -73,6 +73,18 @@
   line-height: 1.5;
 }
 
+/* The composer BOX shows focus (its `:focus-within` ring), so the textarea
+   itself must never draw an outline. This overrides the global `:focus-visible`
+   reset in globals.css — text inputs match `:focus-visible` even on mouse click,
+   and with equal specificity the winner depends on CSS source order, which
+   differs between dev and the production build (hence the stray rectangle that
+   only showed in prod). The `:focus-visible` selector here raises specificity
+   so this wins regardless of ordering. */
+.composerInput:focus,
+.composerInput:focus-visible {
+  outline: none;
+}
+
 .composerInput::placeholder {
   color: var(--ink-faint);
 }
