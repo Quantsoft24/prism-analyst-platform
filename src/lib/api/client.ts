@@ -82,7 +82,12 @@ export async function authHeaders(): Promise<Record<string, string>> {
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (response.ok) {
-    return (await response.json()) as T;
+    // 204 / empty success bodies (e.g. PATCH rename, some PUTs) have nothing to
+    // parse — calling response.json() on them throws and would wrongly route a
+    // successful mutation into onError. Parse only when there's a body.
+    if (response.status === 204) return undefined as T;
+    const text = await response.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   }
   let body: ApiErrorBody | null = null;
   try {

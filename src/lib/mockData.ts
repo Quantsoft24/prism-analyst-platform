@@ -13,7 +13,7 @@ export const MOCK_USER = {
 };
 
 /* ── Navigation ── */
-export type NavView = "dashboard" | "chat" | "companies" | "bmc" | "news" | "stocks" | "regulatory" | "portfolio" | "reports" | "account" | "settings";
+export type NavView = "dashboard" | "chat" | "companies" | "bmc" | "news" | "stocks" | "regulatory" | "portfolio" | "account" | "settings";
 
 export interface NavItem {
   id: NavView;
@@ -31,7 +31,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "stocks", label: "Stock Dashboard", icon: "stocks" },
   { id: "regulatory", label: "Regulatory Lens", icon: "shield" },
   { id: "portfolio", label: "Portfolio Builder", icon: "portfolio" },
-  { id: "reports", label: "Reports Library", icon: "reports" },
   // "account" (My Activity) + "settings" live at the bottom of the sidebar
   // (footer), ChatGPT/Claude-style — not in the main workspace nav list.
 ];
@@ -249,30 +248,6 @@ export const INTENT_CONFIGS: Record<IntentType, IntentConfig> = {
     tabs: ["alerts", "sources"],
   },
 };
-
-/* ── Reports Library ── */
-export interface ReportTileData {
-  category: string;
-  categoryColor: string;
-  title: string;
-  desc: string;
-  time: string;
-  sources: string;
-  extra: string;
-  intentKey?: string;
-}
-
-export const MOCK_REPORTS: ReportTileData[] = [
-  { category: "Quarterly Brief", categoryColor: "accent", title: "Reliance Industries — Q4 FY26 Review", desc: "Revenue beat consensus by 1.9%; Jio ARPU lift; O2C margin compression flagged.", time: "2h ago", sources: "12 sources", extra: "NSE: RELIANCE", intentKey: "reliance" },
-  { category: "Peer Comparison", categoryColor: "info", title: "Indian IT Services — Margins & Growth", desc: "7-company side-by-side: TCS, Infosys, Wipro, HCLTech, LTIMindtree, Mphasis, Persistent.", time: "3h ago", sources: "21 sources", extra: "7 tickers", intentKey: "it" },
-  { category: "DCF Model", categoryColor: "pos", title: "Tata Motors — Bull/Base/Bear scenario", desc: "JLR turnaround thesis tested. Base TP ₹1,120 with 17% upside under base case.", time: "1d ago", sources: "8 sources", extra: "3 scenarios", intentKey: "tata" },
-  { category: "Quarterly Brief", categoryColor: "accent", title: "HDFC Bank — Q4 FY26 Quick Take", desc: "NIM compression; deposit growth lagged advances; provisioning normalised.", time: "2d ago", sources: "9 sources", extra: "NSE: HDFCBANK", intentKey: "hdfc" },
-  { category: "Sector Note", categoryColor: "warn", title: "Capital Goods — Order book momentum", desc: "Mapping 14 companies' YoY order intake. L&T leads in absolute, Siemens in growth %.", time: "3d ago", sources: "32 sources", extra: "14 tickers" },
-  { category: "MF Holdings", categoryColor: "info", title: "Adani Group — MF positioning Δ", desc: "47 funds tracked. Net buying signal post-March; SBI MF top accumulator.", time: "4d ago", sources: "15 sources", extra: "47 funds", intentKey: "adani" },
-  { category: "Screener", categoryColor: "pos", title: "High ROCE · Low debt · Mid-cap", desc: "62 names matched. Filters: ROCE > 25%, D/E < 0.3, m-cap 5K–25K cr.", time: "5d ago", sources: "—", extra: "62 results" },
-  { category: "Quarterly Brief", categoryColor: "accent", title: "Infosys — Q4 FY26 + FY27 Guidance", desc: "Constant currency revenue growth guidance of 3–5%; margin band held at 20–22%.", time: "6d ago", sources: "11 sources", extra: "NSE: INFY" },
-  { category: "Compliance", categoryColor: "warn", title: "SEBI alerts · April 2026 digest", desc: "9 actionable disclosures across watchlist. Insider trading & related party.", time: "1w ago", sources: "9 alerts", extra: "SEBI" },
-];
 
 /* ── Intent Router (client-side) ── */
 export function routeIntent(text: string): IntentType {

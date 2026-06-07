@@ -68,7 +68,6 @@ prism-analyst-platform/
 │   │   │   └── components/         StockDashboardView, SecuritySearch, PriceChart,
 │   │   │                          MetricDropdown, LatestStrip, AnnualFinancials,
 │   │   │                          BalanceSheetTable
-│   │   ├── reports/                Reports Library
 │   │   └── settings/               Settings — incl. Tools & Capabilities (real registry)
 │   ├── components/                 AppShell, Sidebar, Topbar, Toast, SearchModal
 │   ├── hooks/                      useChat, useTheme, useKeyboard
@@ -136,7 +135,6 @@ Open <http://localhost:4000>.
 | **News & Sentiment** | Feed-first market-intelligence surface — all headlines by default; a company chips bar (track / remove / quick-pick) scopes the feed to tracked names with per-company sentiment cards + an inline "why is X moving?" investigation drawer. 20/page numbered pagination. Proxied to the external `prism-news` service. |
 | **Stock Dashboard** | Search any NSE/BSE security → **Overview** section (interactive price chart: metric dropdown line↔candlestick, range filter 5D–MAX, crosshair tooltip, latest-values strip) and a stacked **Annual Financials** section (10-year Balance Sheet tree, standalone/consolidated toggle, Value/YoY%/common-size views, per-row "Ask PRISM"). Direct reads of the investment RDS via `/api/v1/stocks/*`. Income Statement + Cash Flow tabs present but disabled. |
 | **Dashboard**  | Hero greeting, watchlist sparklines, activity feed (currently mock — wires to real telemetry in a later slice). |
-| **Reports**    | Reports Library with category filters (mock scaffold for now). |
 | **Settings**   | 10 sections incl. **Tools & Capabilities** — lists registered integrations from `GET /api/v1/integrations` (`stock-chat · 3 tools`, `bmc · 6 tools`, `prism-financials · 1 tool`) with per-firm enable/disable toggles. |
 
 ## Keyboard Shortcuts
@@ -148,8 +146,7 @@ Open <http://localhost:4000>.
 | ⌘B       | Toggle collapsed sidebar     |
 | ⌘1       | Dashboard                    |
 | ⌘2       | Research Chat                |
-| ⌘3       | Reports Library              |
-| ⌘4       | Settings                     |
+| ⌘3       | Settings                     |
 | Esc      | Close modal                  |
 
 ## Environment Variables

@@ -5,8 +5,9 @@ import * as React from "react";
 import { type NavView, NAV_ITEMS } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import { isMockModeEnabled, setMockMode } from "@/lib/api/chat";
-import { useDeleteConversation, useRecentConversations } from "@/lib/api/conversations";
+import { useRecentConversations } from "@/lib/api/conversations";
 import { useAuthUser } from "@/lib/auth/useAuthUser";
+import ConversationActionsMenu from "./ConversationActionsMenu";
 import Tooltip from "./Tooltip";
 
 import styles from "./Sidebar.module.css";
@@ -75,14 +76,6 @@ const icons: Record<string, React.ReactNode> = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       <path d="M9 12l2 2 4-4" />
-    </svg>
-  ),
-  reports: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="16" y1="13" x2="8" y2="13" />
-      <line x1="16" y1="17" x2="8" y2="17" />
     </svg>
   ),
   account: (
@@ -173,7 +166,6 @@ export default function Sidebar({
 }: SidebarProps) {
   const authUser = useAuthUser();
   const recents = useRecentConversations();
-  const deleteConversation = useDeleteConversation();
   const handleNavClick = (view: NavView) => {
     onNavigate(view);
     onClose();
@@ -290,33 +282,16 @@ export default function Sidebar({
               <div className={styles.navRecentEmpty}>No conversations yet</div>
             )}
             {recents.items.map((chat) => (
-              <div key={chat.id} className={styles.navRecentRow}>
-                <div
-                  className={styles.navRecent}
-                  onClick={() => {
-                    onRecentChat(chat.id);
-                    onClose();
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  title={chat.label}
-                >
-                  {chat.label}
-                </div>
-                {!recents.isMock && (
-                  <button
-                    className={styles.navRecentDelete}
-                    title="Hide conversation"
-                    aria-label="Hide conversation"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteConversation.mutate(chat.id);
-                    }}
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
+              <ConversationRow
+                key={chat.id}
+                id={chat.id}
+                label={chat.label}
+                canManage={!recents.isMock}
+                onOpen={() => {
+                  onRecentChat(chat.id);
+                  onClose();
+                }}
+              />
             ))}
           </>
         )}
@@ -401,6 +376,45 @@ export default function Sidebar({
         </div>
       </aside>
     </>
+  );
+}
+
+/* ── Recent-conversation row ───────────────────────────────────────────────
+ * The conversation title (click → open) plus the shared "⋯" actions menu
+ * (Rename / Delete with confirmation) — identical to My Activity.
+ * ──────────────────────────────────────────────────────────────────────── */
+function ConversationRow({
+  id,
+  label,
+  canManage,
+  onOpen,
+}: {
+  id: string;
+  label: string;
+  canManage: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <div className={styles.navRecentRow}>
+      <div
+        className={styles.navRecent}
+        onClick={onOpen}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        title={label}
+      >
+        {label}
+      </div>
+      {canManage && (
+        <ConversationActionsMenu id={id} label={label} buttonClassName={styles.navRecentMenuBtn} />
+      )}
+    </div>
   );
 }
 

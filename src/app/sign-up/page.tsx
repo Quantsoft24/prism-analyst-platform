@@ -41,7 +41,11 @@ export default function SignUpPage() {
     );
   }
 
-  const callback = `${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback`;
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const callback = `${origin}/auth/callback`; // OAuth (PKCE, same-browser)
+  // Email confirmation uses the token_hash flow (works on any device/browser).
+  // {{ .RedirectTo }} in the Supabase "Confirm signup" template resolves to this.
+  const confirmRedirect = `${origin}/auth/confirm`;
 
   async function withBusy(fn: () => Promise<void>) {
     setBusy(true); setErr(null); setMsg(null);
@@ -56,9 +60,17 @@ export default function SignUpPage() {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName }, emailRedirectTo: callback },
+        options: { data: { full_name: fullName }, emailRedirectTo: confirmRedirect },
       });
       if (error) throw error;
+      // Supabase obfuscates "email already registered" (anti-enumeration) by
+      // returning a success-shaped response — but the user comes back with an
+      // EMPTY `identities` array. Detect that and tell the user clearly instead
+      // of the misleading "check your email".
+      if (data.user && (data.user.identities?.length ?? 0) === 0) {
+        setErr("An account with this email already exists. Please sign in instead.");
+        return;
+      }
       // If email confirmation is required, there's no active session yet.
       if (data.session) {
         router.push("/chat");

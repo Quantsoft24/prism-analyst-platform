@@ -73,23 +73,16 @@
   text-align: left; cursor: pointer; color: inherit;
 }
 .row:hover .rowMain { color: var(--accent); }
-.rowDelete {
-  flex-shrink: 0; margin-left: 8px;
-  width: 24px; height: 24px; border-radius: 999px;
-  display: grid; place-items: center;
-  color: var(--ink-faint); font-size: 12px;
+/* Trigger look for the shared "⋯" conversation menu (Rename / Delete). */
+.rowMenuBtn {
+  margin-left: 8px;
+  width: 26px; height: 26px; border-radius: 999px;
+  color: var(--ink-faint);
   transition: color var(--transition-fast), background var(--transition-fast);
 }
-.rowDelete:hover { color: var(--neg); background: var(--neg-soft); }
-.rowDelete:disabled { opacity: 0.4; cursor: default; }
-.rowEditBtn {
-  flex-shrink: 0; margin-left: 8px;
-  width: 24px; height: 24px; border-radius: 999px;
-  display: grid; place-items: center;
-  color: var(--ink-faint); font-size: 12px;
-  transition: color var(--transition-fast), background var(--transition-fast);
-}
-.rowEditBtn:hover { color: var(--accent); background: var(--accent-soft); }
+.rowMenuBtn:hover,
+.rowMenuBtn:focus-visible,
+.rowMenuBtn[data-open="true"] { color: var(--ink); background: var(--bg-tint); }
 
 /* Search box above the conversation list */
 .search {
@@ -99,22 +92,6 @@
   background: var(--bg-elev); color: var(--ink); font-size: 13px;
 }
 .search:focus-visible { outline: none; border-color: var(--accent); }
-
-/* Inline rename */
-.editRow { display: flex; align-items: center; gap: 6px; width: 100%; }
-.editInput {
-  flex: 1; min-width: 0;
-  padding: 5px 8px;
-  border: 1px solid var(--accent); border-radius: var(--radius-sm);
-  background: var(--bg); color: var(--ink); font-size: 14px;
-}
-.editInput:focus-visible { outline: none; }
-.rowAction {
-  flex-shrink: 0; padding: 5px 10px; border-radius: var(--radius-sm);
-  border: 1px solid var(--line); background: var(--bg-elev);
-  font-size: 12px; font-weight: 600; color: var(--ink-soft);
-}
-.rowAction:hover { color: var(--accent); border-color: var(--accent); }
 
 /* ── Guest / empty ── */
 .empty { padding: 48px 16px; text-align: center; }
