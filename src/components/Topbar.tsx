@@ -13,7 +13,6 @@ const VIEW_LABELS: Record<NavView, string> = {
   stocks: "Stock Dashboard",
   regulatory: "Regulatory Lens",
   portfolio: "Portfolio Builder",
-  reports: "Reports Library",
   account: "My Activity",
   settings: "Settings",
 };
@@ -23,6 +22,7 @@ interface TopbarProps {
   activeView: NavView;
   onOpenSidebar: () => void;
   onSearchFocus?: () => void;
+  onNavigate: (view: NavView) => void;
 }
 
 /* ── Component ── */
@@ -30,6 +30,7 @@ export default function Topbar({
   activeView,
   onOpenSidebar,
   onSearchFocus,
+  onNavigate,
 }: TopbarProps) {
 
   return (
@@ -66,13 +67,18 @@ export default function Topbar({
 
       {/* Actions */}
       <div className={styles.actions}>
-        {/* Notifications */}
-        <button className={styles.actionBtn} title="Notifications" aria-label="Notifications">
+        {/* Notifications — routes to the Dashboard for now (a proper
+            notifications panel + real feed comes later). */}
+        <button
+          className={styles.actionBtn}
+          title="Notifications"
+          aria-label="Notifications"
+          onClick={() => onNavigate("dashboard")}
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
-          <span className={styles.notifDot} />
         </button>
 
         {/* Help */}

@@ -105,8 +105,7 @@ Current expected counts (matching backend):
 | ⌘B | Toggle collapsed sidebar |
 | ⌘1 | Dashboard |
 | ⌘2 | Research Chat |
-| ⌘3 | Reports Library |
-| ⌘4 | Settings |
+| ⌘3 | Settings |
 | Esc | Close modal |
 
 ## Views beyond chat (each a component in the `/chat` AppShell view-switcher)

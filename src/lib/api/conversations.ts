@@ -79,21 +79,45 @@ export function useRecentConversations(): { items: RecentItem[]; isMock: boolean
   return { items, isMock: false, loading: query.isLoading };
 }
 
-/** Soft-delete (hide) a conversation, then refresh the list. */
+/** Soft-delete (hide) a conversation. Optimistically removes it from the list
+ *  so the row disappears instantly; rolls back on error; reconciles after. */
 export function useDeleteConversation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (sessionId: string) => conversationsApi.remove(sessionId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: conversationKeys.list }),
+    onMutate: async (sessionId: string) => {
+      await qc.cancelQueries({ queryKey: conversationKeys.list });
+      const previous = qc.getQueryData<ConversationSummary[]>(conversationKeys.list);
+      qc.setQueryData<ConversationSummary[]>(conversationKeys.list, (old) =>
+        old?.filter((c) => c.session_id !== sessionId),
+      );
+      return { previous };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.previous) qc.setQueryData(conversationKeys.list, ctx.previous);
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: conversationKeys.list }),
   });
 }
 
-/** Rename a conversation, then refresh the list. */
+/** Rename a conversation. Optimistically updates the title in the cached list
+ *  so it changes instantly; rolls back on error; reconciles after. */
 export function useRenameConversation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ sessionId, title }: { sessionId: string; title: string }) =>
       conversationsApi.rename(sessionId, title),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: conversationKeys.list }),
+    onMutate: async ({ sessionId, title }: { sessionId: string; title: string }) => {
+      await qc.cancelQueries({ queryKey: conversationKeys.list });
+      const previous = qc.getQueryData<ConversationSummary[]>(conversationKeys.list);
+      qc.setQueryData<ConversationSummary[]>(conversationKeys.list, (old) =>
+        old?.map((c) => (c.session_id === sessionId ? { ...c, title } : c)),
+      );
+      return { previous };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.previous) qc.setQueryData(conversationKeys.list, ctx.previous);
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: conversationKeys.list }),
   });
 }

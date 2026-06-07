@@ -31,8 +31,6 @@ interface ChatActions {
   newResearch: () => void;
   /** Resume a saved recent chat by id. */
   sendRecent: (id: string) => void;
-  /** Open a report intent in chat. */
-  openReport: (intentKey: string) => void;
 }
 
 const ChatStateContext = React.createContext<ReturnType<typeof useChat> | null>(null);
@@ -95,20 +93,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [send, loadConversation, router, toast],
   );
 
-  const openReport = React.useCallback(
-    (intentKey: string) => {
-      const query = RECENT_CHAT_QUERIES[intentKey];
-      if (!query) return;
-      send(query);
-      router.push("/chat");
-      toast("Loading report context…", "info");
-    },
-    [send, router, toast],
-  );
-
   const actions = React.useMemo<ChatActions>(
-    () => ({ bmcTicker, sendQuery, newResearch, sendRecent, openReport }),
-    [bmcTicker, sendQuery, newResearch, sendRecent, openReport],
+    () => ({ bmcTicker, sendQuery, newResearch, sendRecent }),
+    [bmcTicker, sendQuery, newResearch, sendRecent],
   );
 
   return (

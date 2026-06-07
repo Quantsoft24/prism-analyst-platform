@@ -77,8 +77,7 @@ export default function AppShell({
     "escape": closeSidebar,
     "mod+1": () => onNavigate("dashboard"),
     "mod+2": () => onNavigate("chat"),
-    "mod+3": () => onNavigate("reports"),
-    "mod+4": () => onNavigate("settings"),
+    "mod+3": () => onNavigate("settings"),
   });
 
   return (
@@ -103,6 +102,7 @@ export default function AppShell({
           activeView={activeView}
           onOpenSidebar={openSidebar}
           onSearchFocus={onSearchOpen}
+          onNavigate={onNavigate}
         />
 
         <main className={styles.content}>{children}</main>

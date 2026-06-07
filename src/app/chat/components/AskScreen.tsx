@@ -71,7 +71,7 @@ export default function AskScreen({ onSend }: AskScreenProps) {
   return (
     <div className={styles.askScreen}>
       <div className={styles.header}>
-        <div className={styles.eyebrow}>PRISM Research · α</div>
+        <div className={styles.eyebrow}>PRISM Research (βeta)</div>
         <h1 className={styles.title}>
           What would you like to{" "}
           <span className={styles.titleEm}>research</span> today?
