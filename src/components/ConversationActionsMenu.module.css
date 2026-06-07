@@ -1,0 +1,43 @@
+/* Shared conversation "⋯" menu (sidebar Recent + My Activity).
+   The trigger's look is supplied per-surface via `buttonClassName`; this base
+   only handles layout. The popup below is fully shared. */
+.menuBtn {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+/* Fixed-positioned popup (anchored in JS) — escapes overflow clipping and
+   floats above the rest of the UI. */
+.menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 172px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg, var(--shadow-md));
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  cursor: pointer;
+  text-align: left;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.menuItem svg { flex-shrink: 0; }
+.menuItem:hover { color: var(--ink); background: var(--bg-tint); }
+.menuItemDanger { color: var(--neg); }
+.menuItemDanger:hover { color: var(--neg); background: var(--neg-soft); }

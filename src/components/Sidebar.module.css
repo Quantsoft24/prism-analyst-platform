@@ -311,21 +311,25 @@
   flex: 1 1 auto;
   min-width: 0;
 }
-.navRecentDelete {
-  opacity: 0;
+/* "⋯" options button — always visible (discoverable) but low-chrome; it
+   brightens on row/button hover and while its menu is open. */
+.navRecentMenuBtn {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   margin-right: 4px;
   border-radius: var(--radius-sm);
   display: grid;
   place-items: center;
   color: var(--ink-faint);
-  font-size: 11px;
-  transition: opacity var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
 }
-.navRecentRow:hover .navRecentDelete { opacity: 1; }
-.navRecentDelete:hover { color: var(--neg); background: var(--neg-soft); }
+.navRecentRow:hover .navRecentMenuBtn { color: var(--ink-soft); }
+.navRecentMenuBtn:hover,
+.navRecentMenuBtn:focus-visible,
+.navRecentMenuBtn[data-open="true"] { color: var(--ink); background: var(--bg-tint); }
+/* The "⋯" popup itself is shared — see ConversationActionsMenu.module.css. */
 
 /* ── Footer ── */
 .sidebarFooter {

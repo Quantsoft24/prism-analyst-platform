@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { MOCK_WATCHLIST, MOCK_TOOLS, MOCK_REPORTS, RECENT_CHATS } from "@/lib/mockData";
+import { MOCK_WATCHLIST, MOCK_TOOLS, RECENT_CHATS } from "@/lib/mockData";
 import styles from "./SearchModal.module.css";
 
 /* ── Search Result Item ── */
 interface SearchResult {
-  type: "company" | "tool" | "report" | "chat";
+  type: "company" | "tool" | "chat";
   title: string;
   meta: string;
   action: string;
@@ -32,13 +32,6 @@ function buildResults(query: string): SearchResult[] {
     }
   });
 
-  /* Reports */
-  MOCK_REPORTS.forEach((r) => {
-    if (r.title.toLowerCase().includes(q) || r.desc.toLowerCase().includes(q)) {
-      results.push({ type: "report", title: r.title, meta: `${r.category} · ${r.time}`, action: r.title });
-    }
-  });
-
   /* Recent chats */
   RECENT_CHATS.forEach((c) => {
     if (c.label.toLowerCase().includes(q)) {
@@ -54,7 +47,6 @@ function TypeIcon({ type }: { type: string }) {
   const icons: Record<string, React.ReactNode> = {
     company: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>,
     tool: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /></svg>,
-    report: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>,
     chat: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>,
   };
   return <span className={styles.typeIcon}>{icons[type]}</span>;
@@ -112,7 +104,7 @@ export default function SearchModal({ open, onClose, onSelect }: SearchModalProp
           <input
             ref={inputRef}
             className={styles.input}
-            placeholder="Search companies, tools, reports…"
+            placeholder="Search companies, tools…"
             value={query}
             onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
             onKeyDown={handleKeyDown}
