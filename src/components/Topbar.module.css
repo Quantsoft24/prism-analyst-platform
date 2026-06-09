@@ -40,19 +40,59 @@
 /* ── Breadcrumbs ── */
 .breadcrumbs {
   font-size: 12px;
-  color: var(--ink-mute);
+  min-width: 0;
+}
+
+.breadList {
   display: flex;
   align-items: center;
   gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.breadcrumbs span:last-child {
+.breadItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.breadLink {
+  color: var(--ink-mute);
+  text-decoration: none;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.breadLink:hover {
+  color: var(--ink);
+  background: var(--bg-tint);
+}
+
+.breadLink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.breadCurrent {
   color: var(--ink);
   font-weight: 500;
+  padding: 2px 5px;
+  white-space: nowrap;
+  /* the trailing crumb can be long (e.g. a doc title) — let it truncate */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
 }
 
 .breadSep {
-  opacity: 0.4;
+  color: var(--ink-faint);
+  opacity: 0.5;
+  user-select: none;
 }
 
 /* ── Search ── */
