@@ -1,13 +1,15 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
 import type { NavView } from "@/lib/mockData";
 import styles from "./Topbar.module.css";
 
-/* ── View display names ── */
+/* ── View display names (keyed by route segment / NavView) ── */
 const VIEW_LABELS: Record<NavView, string> = {
   dashboard: "Dashboard",
   chat: "Research Chat",
-  companies: "Companies",
   bmc: "Business Model Canvas",
   news: "News & Sentiment",
   stocks: "Stock Dashboard",
@@ -17,9 +19,33 @@ const VIEW_LABELS: Record<NavView, string> = {
   settings: "Settings",
 };
 
+/** Home a breadcrumb root links to. Dashboard is the workspace landing page. */
+const HOME_HREF = "/dashboard";
+
+/** "deal-flow" → "Deal Flow" — fallback label for unknown/dynamic segments. */
+function titleCase(seg: string): string {
+  return decodeURIComponent(seg).replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+interface Crumb {
+  label: string;
+  href: string;
+}
+
+/** Build the trail from the URL so it's always accurate, on every route.
+ *  Accumulates hrefs (`/a`, `/a/b`, …) so nested routes get clickable parents. */
+function buildCrumbs(pathname: string): Crumb[] {
+  const crumbs: Crumb[] = [];
+  let href = "";
+  for (const seg of pathname.split("/").filter(Boolean)) {
+    href += `/${seg}`;
+    crumbs.push({ label: VIEW_LABELS[seg as NavView] ?? titleCase(seg), href });
+  }
+  return crumbs;
+}
+
 /* ── Props ── */
 interface TopbarProps {
-  activeView: NavView;
   onOpenSidebar: () => void;
   onSearchFocus?: () => void;
   onNavigate: (view: NavView) => void;
@@ -27,11 +53,12 @@ interface TopbarProps {
 
 /* ── Component ── */
 export default function Topbar({
-  activeView,
   onOpenSidebar,
   onSearchFocus,
   onNavigate,
 }: TopbarProps) {
+  const pathname = usePathname();
+  const crumbs = buildCrumbs(pathname);
 
   return (
     <header className={styles.topbar} role="banner">
@@ -48,12 +75,27 @@ export default function Topbar({
         </svg>
       </button>
 
-      {/* Breadcrumbs */}
-      <div className={styles.breadcrumbs}>
-        <span>PRISM</span>
-        <span className={styles.breadSep}>/</span>
-        <span>{VIEW_LABELS[activeView]}</span>
-      </div>
+      {/* Breadcrumbs — clickable trail derived from the current route */}
+      <nav className={styles.breadcrumbs} aria-label="Breadcrumb">
+        <ol className={styles.breadList}>
+          <li className={styles.breadItem}>
+            <Link href={HOME_HREF} className={styles.breadLink}>PRISM</Link>
+          </li>
+          {crumbs.map((c, i) => {
+            const isLast = i === crumbs.length - 1;
+            return (
+              <li key={c.href} className={styles.breadItem}>
+                <span className={styles.breadSep} aria-hidden="true">/</span>
+                {isLast ? (
+                  <span className={styles.breadCurrent} aria-current="page">{c.label}</span>
+                ) : (
+                  <Link href={c.href} className={styles.breadLink}>{c.label}</Link>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
 
       {/* Search — opens modal */}
       <div className={styles.searchBar} onClick={onSearchFocus} role="button" tabIndex={0}>

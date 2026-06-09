@@ -35,10 +35,11 @@ function SignInForm() {
 
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [code, setCode] = React.useState("");
+  const [phase, setPhase] = React.useState<"password" | "otp">("password");
   const [msg, setMsg] = React.useState<string | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
-  const [needsConfirm, setNeedsConfirm] = React.useState(false);
 
   if (!config.authEnabled) {
     return (
@@ -57,9 +58,6 @@ function SignInForm() {
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const callback = `${origin}/auth/callback?next=${encodeURIComponent(next)}`;
-  // Resent confirmation uses the token_hash flow (any device) — must match the
-  // Supabase "Confirm signup" template's {{ .RedirectTo }}.
-  const confirmRedirect = `${origin}/auth/confirm`;
 
   async function withBusy(fn: () => Promise<void>) {
     setBusy(true); setErr(null); setMsg(null);
@@ -69,15 +67,17 @@ function SignInForm() {
 
   const onPassword = (e: React.FormEvent) => {
     e.preventDefault();
-    setNeedsConfirm(false);
     void withBusy(async () => {
       const supabase = getBrowserSupabase();
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
-        // "Confirm email" is ON and this account hasn't clicked the link yet.
+        // "Confirm email" is ON and this account never verified. Email a fresh
+        // 6-digit code and switch to the code-entry step (no link).
         if (error.code === "email_not_confirmed" || /not confirmed/i.test(error.message)) {
-          setNeedsConfirm(true);
-          setErr("Please confirm your email first — check your inbox for the link.");
+          const { error: resendErr } = await supabase.auth.resend({ type: "signup", email });
+          if (resendErr) throw resendErr;
+          setPhase("otp");
+          setMsg(`Your email isn't verified yet. We emailed a 6-digit code to ${email} — enter it to finish.`);
           return;
         }
         throw error;
@@ -87,18 +87,25 @@ function SignInForm() {
     });
   };
 
-  const onResendConfirm = () =>
+  // Verify the emailed code → confirms the account AND establishes the session.
+  const onVerify = (e: React.FormEvent) => {
+    e.preventDefault();
+    void withBusy(async () => {
+      const supabase = getBrowserSupabase();
+      const { error } = await supabase.auth.verifyOtp({ email, token: code.trim(), type: "signup" });
+      if (error) throw error;
+      router.push(next);
+      router.refresh();
+    });
+  };
+
+  const onResendCode = () =>
     void withBusy(async () => {
       if (!email) throw new Error("Enter your email first.");
       const supabase = getBrowserSupabase();
-      const { error } = await supabase.auth.resend({
-        type: "signup",
-        email,
-        options: { emailRedirectTo: confirmRedirect },
-      });
+      const { error } = await supabase.auth.resend({ type: "signup", email });
       if (error) throw error;
-      setNeedsConfirm(false);
-      setMsg("Confirmation email resent — check your inbox.");
+      setMsg(`New code sent to ${email}.`);
     });
 
   const onGoogle = () =>
@@ -132,6 +139,51 @@ function SignInForm() {
       setMsg("Password-reset email sent.");
     });
 
+  // ── Verify-email step (unconfirmed account tried to sign in) ──
+  if (phase === "otp") {
+    return (
+      <div className={styles.page}>
+        <form className={styles.card} onSubmit={onVerify}>
+          <h1 className={styles.title}>Verify your email</h1>
+
+          <label className={styles.label}>6-digit code</label>
+          <input
+            className={styles.otpInput}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            placeholder="••••••"
+            autoFocus
+            required
+          />
+
+          {err && <div className={styles.error}>{err}</div>}
+          {msg && <div className={styles.msg}>{msg}</div>}
+
+          <button className={styles.primaryBtn} type="submit" disabled={busy || code.length < 6}>
+            Verify &amp; continue
+          </button>
+
+          <div className={styles.row}>
+            <button className={styles.linkBtn} type="button" onClick={onResendCode} disabled={busy}>
+              Resend code
+            </button>
+            <button
+              className={styles.linkBtn}
+              type="button"
+              onClick={() => { setPhase("password"); setCode(""); setErr(null); setMsg(null); }}
+              disabled={busy}
+            >
+              ← Back to sign in
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.page}>
       <form className={styles.card} onSubmit={onPassword}>
@@ -146,11 +198,6 @@ function SignInForm() {
           onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
 
         {err && <div className={styles.error}>{err}</div>}
-        {needsConfirm && (
-          <button className={styles.linkBtn} type="button" onClick={onResendConfirm} disabled={busy}>
-            Resend confirmation email
-          </button>
-        )}
         {msg && <div className={styles.msg}>{msg}</div>}
 
         <button className={styles.primaryBtn} type="submit" disabled={busy}>Sign in</button>
