@@ -127,3 +127,23 @@
   padding: 8px 10px;
   border-radius: var(--radius-sm);
 }
+
+/* OTP code entry — one wide, letter-spaced numeric field (keeps paste/autofill
+   working, unlike 6 separate boxes). */
+.otpInput {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 12px;
+  text-indent: 12px; /* offset the trailing letter-spacing so digits look centered */
+}
+.otpInput:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}

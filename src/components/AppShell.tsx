@@ -99,7 +99,6 @@ export default function AppShell({
 
       <div className={styles.main}>
         <Topbar
-          activeView={activeView}
           onOpenSidebar={openSidebar}
           onSearchFocus={onSearchOpen}
           onNavigate={onNavigate}

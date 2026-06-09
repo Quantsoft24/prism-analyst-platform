@@ -14,15 +14,18 @@ import styles from "../auth.module.css";
 const GOOGLE_AUTH_ENABLED = false;
 
 /**
- * Sign-up: email/password (+ name) and Google. Supabase sends a verification
- * email if "Confirm email" is on in the dashboard; otherwise the user is signed
- * in immediately. Only meaningful when NEXT_PUBLIC_AUTH_ENABLED=true.
+ * Sign-up: email/password (+ name), then a 6-digit OTP code emailed for
+ * verification (no link). Step 1 creates the account; Step 2 confirms it with
+ * `verifyOtp`, which establishes the session. No redirect / PKCE verifier, so it
+ * works on any device/browser. Only meaningful when NEXT_PUBLIC_AUTH_ENABLED=true.
  */
 export default function SignUpPage() {
   const router = useRouter();
   const [fullName, setFullName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [code, setCode] = React.useState("");
+  const [phase, setPhase] = React.useState<"form" | "otp">("form");
   const [msg, setMsg] = React.useState<string | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -43,9 +46,6 @@ export default function SignUpPage() {
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const callback = `${origin}/auth/callback`; // OAuth (PKCE, same-browser)
-  // Email confirmation uses the token_hash flow (works on any device/browser).
-  // {{ .RedirectTo }} in the Supabase "Confirm signup" template resolves to this.
-  const confirmRedirect = `${origin}/auth/confirm`;
 
   async function withBusy(fn: () => Promise<void>) {
     setBusy(true); setErr(null); setMsg(null);
@@ -53,6 +53,7 @@ export default function SignUpPage() {
     finally { setBusy(false); }
   }
 
+  // Step 1 — create the account; Supabase emails a 6-digit code (Confirm email ON).
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     void withBusy(async () => {
@@ -60,26 +61,51 @@ export default function SignUpPage() {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName }, emailRedirectTo: confirmRedirect },
+        options: { data: { full_name: fullName } },
       });
       if (error) throw error;
       // Supabase obfuscates "email already registered" (anti-enumeration) by
       // returning a success-shaped response — but the user comes back with an
-      // EMPTY `identities` array. Detect that and tell the user clearly instead
-      // of the misleading "check your email".
+      // EMPTY `identities` array. Detect that and tell the user clearly.
       if (data.user && (data.user.identities?.length ?? 0) === 0) {
         setErr("An account with this email already exists. Please sign in instead.");
         return;
       }
-      // If email confirmation is required, there's no active session yet.
+      // If confirmation is somehow off, a session is returned → straight in.
       if (data.session) {
         router.push("/chat");
         router.refresh();
-      } else {
-        setMsg("Check your email to confirm your account, then sign in.");
+        return;
       }
+      // Otherwise move to the code-entry step.
+      setPhase("otp");
+      setMsg(`We emailed a 6-digit code to ${email}. Enter it below to finish.`);
     });
   };
+
+  // Step 2 — verify the emailed code → establishes the session.
+  const onVerify = (e: React.FormEvent) => {
+    e.preventDefault();
+    void withBusy(async () => {
+      const supabase = getBrowserSupabase();
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: code.trim(),
+        type: "signup",
+      });
+      if (error) throw error;
+      router.push("/chat");
+      router.refresh();
+    });
+  };
+
+  const onResend = () =>
+    void withBusy(async () => {
+      const supabase = getBrowserSupabase();
+      const { error } = await supabase.auth.resend({ type: "signup", email });
+      if (error) throw error;
+      setMsg(`New code sent to ${email}.`);
+    });
 
   const onGoogle = () =>
     void withBusy(async () => {
@@ -91,6 +117,52 @@ export default function SignUpPage() {
       if (error) throw error;
     });
 
+  // ── Step 2: OTP code entry ──
+  if (phase === "otp") {
+    return (
+      <div className={styles.page}>
+        <form className={styles.card} onSubmit={onVerify}>
+          <h1 className={styles.title}>Enter your code</h1>
+
+          <label className={styles.label}>6-digit code</label>
+          <input
+            className={styles.otpInput}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            placeholder="••••••"
+            autoFocus
+            required
+          />
+
+          {err && <div className={styles.error}>{err}</div>}
+          {msg && <div className={styles.msg}>{msg}</div>}
+
+          <button className={styles.primaryBtn} type="submit" disabled={busy || code.length < 6}>
+            Verify &amp; continue
+          </button>
+
+          <div className={styles.row}>
+            <button className={styles.linkBtn} type="button" onClick={onResend} disabled={busy}>
+              Resend code
+            </button>
+            <button
+              className={styles.linkBtn}
+              type="button"
+              onClick={() => { setPhase("form"); setCode(""); setErr(null); setMsg(null); }}
+              disabled={busy}
+            >
+              ← Wrong email? Start over
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  // ── Step 1: account form ──
   return (
     <div className={styles.page}>
       <form className={styles.card} onSubmit={onSubmit}>
