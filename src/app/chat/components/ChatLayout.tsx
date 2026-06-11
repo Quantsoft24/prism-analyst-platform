@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -9,6 +9,9 @@ import { type IntentConfig, type IntentType } from "@/lib/mockData";
 import { useAuthUser } from "@/lib/auth/useAuthUser";
 import QuotaNotice from "@/components/QuotaNotice";
 import { useToast } from "@/components/Toast";
+import ClarificationCard from "./ClarificationCard";
+import TaskChecklist from "./TaskChecklist";
+import FilingPdfViewer, { type FilingPdfSource } from "./FilingPdfViewer";
 import { toolLabel } from "./toolLabels";
 import type { Citation } from "@/lib/api/chat";
 import type {
@@ -36,12 +39,26 @@ interface ChatLayoutProps {
   onFollowUp: (q: string) => void;
   onStop: () => void;
   onRetry: () => void;
+  /** Answer the agent's structured clarification (sends the pick back into the
+   *  same session). */
+  onRespondClarification: (answer: string) => void;
+}
+
+/* Lets a deeply-nested CitationMarker open a filing PDF in the workspace drawer
+ * (the citation→exact-page deep link) without threading a callback through every
+ * render layer. Provided by ChatLayout; null elsewhere (falls back to a new tab). */
+const FilingPdfContext = createContext<((source: FilingPdfSource) => void) | null>(null);
+
+/** Does this citation point at a filing PDF we can deep-link into? */
+function isFilingDeepLink(c: Citation | undefined): c is Citation & { url: string } {
+  return !!c && c.source_kind === "filing" && !!c.url;
 }
 
 /* ── Citation popover ──────────────────────────────────────────────────
  * A `[n]` marker in the prose surfaces a hover/focus card with the matching
- * Citation's label, source kind, date, and (if present) an external link.
- * Pure CSS hover/focus — no Radix needed for this one. */
+ * Citation's label, source kind, date, and (if present) a link. Filing
+ * citations open the PDF at the cited page IN-APP (Report drawer); others open
+ * the source in a new tab. Pure CSS hover/focus — no Radix needed. */
 
 function CitationMarker({
   index,
@@ -50,10 +67,29 @@ function CitationMarker({
   index: number;
   citation: Citation | undefined;
 }) {
+  const openFilingPdf = useContext(FilingPdfContext);
+  const deepLink = isFilingDeepLink(citation) && !!openFilingPdf;
+  const openPdf = () => {
+    if (isFilingDeepLink(citation) && openFilingPdf) {
+      openFilingPdf({ url: citation.url, page: citation.page ?? null, label: citation.label });
+    }
+  };
+
   return (
     <span className={styles.citeWrap} tabIndex={0}>
-      {citation?.url ? (
-        // Clickable → opens the original reference in a new tab.
+      {deepLink ? (
+        // Filing → open the PDF at the cited page inside the workspace.
+        <button
+          type="button"
+          className={cn(styles.cite, styles.citeLink)}
+          onClick={openPdf}
+          aria-describedby={`cite-${index}`}
+          title={`Open PDF: ${citation!.label}`}
+        >
+          {index}
+        </button>
+      ) : citation?.url ? (
+        // Non-filing → opens the original reference in a new tab.
         <a
           className={cn(styles.cite, styles.citeLink)}
           href={citation.url}
@@ -82,17 +118,24 @@ function CitationMarker({
           <span className={styles.citePopoverLabel}>{citation.label}</span>
           <span className={styles.citePopoverMeta}>
             <span className={styles.citePopoverKind}>{citation.source_kind}</span>
+            {citation.page != null && <span>· p.{citation.page}</span>}
             {citation.as_of && <span>· {citation.as_of}</span>}
           </span>
-          {citation.url && (
-            <a
-              href={citation.url}
-              target="_blank"
-              rel="noreferrer noopener"
-              className={styles.citePopoverLink}
-            >
-              Open source ↗
-            </a>
+          {deepLink ? (
+            <button type="button" className={styles.citePopoverLink} onClick={openPdf}>
+              Open PDF at p.{citation!.page ?? 1} ↗
+            </button>
+          ) : (
+            citation.url && (
+              <a
+                href={citation.url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className={styles.citePopoverLink}
+              >
+                Open source ↗
+              </a>
+            )
           )}
         </span>
       )}
@@ -100,22 +143,115 @@ function CitationMarker({
   );
 }
 
-/** Split a text run on `[n]` markers and render each as a CitationMarker. */
+const _normCite = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+/** Find the evidence-derived filing citation behind an inline `[Company | p.N]`
+ *  marker, so the marker can deep-link to that PDF page. Matches on page (a
+ *  strong signal) + company-name overlap; falls back to same-page. */
+function findFilingCitation(
+  citations: Citation[],
+  company: string,
+  page: number,
+): (Citation & { url: string }) | undefined {
+  const nc = _normCite(company);
+  const samePage = citations.filter(
+    (c): c is Citation & { url: string } =>
+      c.source_kind === "filing" && !!c.url && c.page === page,
+  );
+  return (
+    samePage.find((c) => {
+      const nl = _normCite(c.label);
+      return nl.includes(nc) || nc.includes(nl.replace(/p\d+$/, ""));
+    }) ?? samePage[0]
+  );
+}
+
+/** Inline `[Company | p.N]` citation in the answer prose → a clickable chip
+ *  that opens the source PDF at that page in the Report drawer. */
+function FilingCiteMarker({
+  label,
+  company,
+  page,
+  citations,
+}: {
+  label: string;
+  company: string;
+  page: number;
+  citations: Citation[];
+}) {
+  const openFilingPdf = useContext(FilingPdfContext);
+  const cite = findFilingCitation(citations, company, page);
+  if (!cite || !openFilingPdf) {
+    return <span className={styles.citeInlineText}>{label}</span>;
+  }
+  return (
+    <button
+      type="button"
+      className={styles.citeInline}
+      title={`Open PDF at p.${page}`}
+      onClick={() =>
+        openFilingPdf({ url: cite.url, page: cite.page ?? page, label: cite.label || label })
+      }
+    >
+      {label}
+    </button>
+  );
+}
+
+/** Split a text run on citation markers — numeric `[n]` and inline
+ *  `[Company | p.N]` — and render each clickable. */
 function renderTextWithCitations(
   text: string,
   citations: Citation[],
 ): React.ReactNode[] {
-  const parts = text.split(/(\[\d+\])/g);
+  const parts = text.split(/(\[\d+\]|\[[^\]]*\|\s*pp?\.?\s*\d+\])/g);
   return parts.map((part, i) => {
-    const match = part.match(/^\[(\d+)\]$/);
-    if (match) {
-      const n = Number(match[1]);
+    const numMatch = part.match(/^\[(\d+)\]$/);
+    if (numMatch) {
+      const n = Number(numMatch[1]);
       return (
         <CitationMarker key={i} index={n} citation={citations[n - 1]} />
       );
     }
+    const fileMatch = part.match(/^\[([^\]]*?)\|\s*pp?\.?\s*(\d+)\]$/i);
+    if (fileMatch) {
+      return (
+        <FilingCiteMarker
+          key={i}
+          label={part}
+          company={fileMatch[1].trim()}
+          page={Number(fileMatch[2])}
+          citations={citations}
+        />
+      );
+    }
     return <span key={i}>{part}</span>;
   });
+}
+
+/** The "Open" affordance in a Sources list row. Filing citations open the PDF
+ *  at the cited page IN the Report drawer; other sources open in a new tab. */
+function SourceOpenLink({ citation }: { citation: Citation }) {
+  const openFilingPdf = useContext(FilingPdfContext);
+  if (!citation.url) return null;
+  if (isFilingDeepLink(citation) && openFilingPdf) {
+    return (
+      <button
+        type="button"
+        className={styles.sourceLink}
+        onClick={() =>
+          openFilingPdf({ url: citation.url, page: citation.page ?? null, label: citation.label })
+        }
+      >
+        Open{citation.page != null ? ` p.${citation.page}` : ""} ↗
+      </button>
+    );
+  }
+  return (
+    <a href={citation.url} target="_blank" rel="noreferrer noopener" className={styles.sourceLink}>
+      Open ↗
+    </a>
+  );
 }
 
 /** ReactMarkdown component overrides — paragraphs / lists / inline + citation
@@ -141,6 +277,10 @@ function makeMarkdownComponents(citations: Citation[]) {
     li: ({ children }: MdProps) => <li>{withCites(children)}</li>,
     em: ({ children }: MdProps) => <em>{withCites(children)}</em>,
     strong: ({ children }: MdProps) => <strong>{withCites(children)}</strong>,
+    // Comparison tables (GFM) — resolve citations inside cells too, so a
+    // `[Company | p.N]` in a table cell is still a clickable PDF deep-link.
+    td: ({ children }: MdProps) => <td>{withCites(children)}</td>,
+    th: ({ children }: MdProps) => <th>{withCites(children)}</th>,
     a: ({ href, children }: MdAnchorProps) => (
       <a href={href} target="_blank" rel="noreferrer noopener">
         {children}
@@ -571,9 +711,10 @@ function AnswerFooter({
                   <span className={styles.sourceKindTag}>{c.source_kind}</span>
                   {c.as_of && <span>· {c.as_of}</span>}
                   {c.url && (
-                    <a href={c.url} target="_blank" rel="noreferrer noopener" className={styles.sourceLink}>
-                      · Open ↗
-                    </a>
+                    <>
+                      <span>·</span>
+                      <SourceOpenLink citation={c} />
+                    </>
                   )}
                 </div>
               </div>
@@ -1196,14 +1337,7 @@ function SourcesView({
             {c.url && (
               <>
                 <span className={styles.sourceDot}>·</span>
-                <a
-                  href={c.url}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className={styles.sourceLink}
-                >
-                  Open ↗
-                </a>
+                <SourceOpenLink citation={c} />
               </>
             )}
           </div>
@@ -1252,12 +1386,23 @@ export default function ChatLayout({
   onFollowUp,
   onStop,
   onRetry,
+  onRespondClarification,
 }: ChatLayoutProps) {
   const authUser = useAuthUser();
   const userFirstName = (authUser.name || "You").split(" ")[0];
   const userInitial = (authUser.initials || "Y").charAt(0);
   const [followUpText, setFollowUpText] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // The filing PDF a citation deep-linked into (opens in the workspace drawer).
+  const [pdfSource, setPdfSource] = useState<FilingPdfSource | null>(null);
+  const openFilingPdf = React.useCallback((source: FilingPdfSource) => {
+    setPdfSource(source);
+    setDrawerOpen(true);
+  }, []);
+  const closeDrawer = React.useCallback(() => {
+    setDrawerOpen(false);
+    setPdfSource(null);
+  }, []);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // call_id → expanded? Tool steps start collapsed; click to inspect I/O.
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
@@ -1294,6 +1439,13 @@ export default function ChatLayout({
   const toolCount = lastAssistant?.toolCalls?.length ?? 0;
   const cost = formatTokensCost(runMeta);
 
+  // Pending clarification — the agent paused for input. Rendered DOCKED above the
+  // composer ("tied to the chat box"); it vanishes once the user answers (a new
+  // turn starts → phase leaves "done" / a new message has no clarification).
+  const lastMsg = messages.length ? messages[messages.length - 1] : undefined;
+  const activeClarification =
+    !isRunning && lastMsg?.clarification ? lastMsg.clarification : null;
+
   // What is the agent doing right now? — drives the header + composer status.
   const runningTool = lastAssistant?.toolCalls?.find((t) => t.status === "running");
   const workingLabel =
@@ -1308,6 +1460,7 @@ export default function ChatLayout({
           : "Working…";
 
   return (
+    <FilingPdfContext.Provider value={openFilingPdf}>
     <div className={cn(styles.chatRoot, drawerOpen && styles.chatRootSplit)}>
       <div className={styles.chat}>
       {/* ── Header ── */}
@@ -1381,6 +1534,9 @@ export default function ChatLayout({
                   {msg.isThinking && tools.length === 0 && !msg.thoughts?.length && <ThinkingDots />}
                 </div>
 
+                {/* Live task checklist (the agent's plan, ticks off as it works) */}
+                {msg.plan && msg.plan.length > 0 && <TaskChecklist steps={msg.plan} />}
+
                 {/* Inline agent activity: thinking → tool steps (collapses
                     to a one-line summary once the turn is done) */}
                 <AgentActivity
@@ -1408,12 +1564,34 @@ export default function ChatLayout({
                         onOpenReport={() => setDrawerOpen(true)}
                       />
                     )}
+                    {/* Suggested follow-ups — only on the latest answer, idle. */}
+                    {!streaming &&
+                      !isRunning &&
+                      mi === messages.length - 1 &&
+                      (msg.structured?.suggestions?.length ?? 0) > 0 && (
+                        <div className={styles.suggestions}>
+                          {msg.structured!.suggestions!.map((s, si) => (
+                            <button
+                              key={si}
+                              type="button"
+                              className={styles.suggestionChip}
+                              onClick={() => onFollowUp(s)}
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                   </>
                 )}
+
+                {/* Clarification renders DOCKED above the composer (not inline) —
+                    see the activeClarification block near the composer. */}
 
                 {/* Empty-answer fallback */}
                 {phase === "done" &&
                   !msg.error &&
+                  !msg.clarification &&
                   !msg.streamedText &&
                   !msg.text &&
                   tools.length > 0 && (
@@ -1476,6 +1654,14 @@ export default function ChatLayout({
       {/* ── Composer ── */}
       <div className={styles.composerWrap}>
         <div className={styles.composerInner}>
+          {/* Clarification form — docked right above the input, themed light/dark. */}
+          {activeClarification && (
+            <ClarificationCard
+              key={activeClarification.agent_run_id ?? messages.length}
+              clarification={activeClarification}
+              onRespond={onRespondClarification}
+            />
+          )}
           <QuotaNotice />
           {isRunning && (
             <div className={styles.workingRow}>
@@ -1520,14 +1706,16 @@ export default function ChatLayout({
           Artifacts; becomes a full-screen sheet on tablet/mobile. ── */}
       {drawerOpen && (
         <>
-          <div className={styles.panelBackdrop} onClick={() => setDrawerOpen(false)} />
+          <div className={styles.panelBackdrop} onClick={closeDrawer} />
           <aside className={styles.workspacePanel} aria-label="Research workspace">
             <div className={styles.panelHeader}>
-              <span className={styles.panelTitle}>Research workspace</span>
+              <span className={styles.panelTitle}>
+                {pdfSource ? "Source filing" : "Research workspace"}
+              </span>
               <button
                 type="button"
                 className={styles.panelClose}
-                onClick={() => setDrawerOpen(false)}
+                onClick={closeDrawer}
                 aria-label="Close workspace"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1537,11 +1725,16 @@ export default function ChatLayout({
               </button>
             </div>
             <div className={styles.panelBody}>
-              <WorkspacePane messages={messages} intentConfig={intentConfig} runMeta={runMeta} />
+              {pdfSource ? (
+                <FilingPdfViewer source={pdfSource} onClose={() => setPdfSource(null)} />
+              ) : (
+                <WorkspacePane messages={messages} intentConfig={intentConfig} runMeta={runMeta} />
+              )}
             </div>
           </aside>
         </>
       )}
     </div>
+    </FilingPdfContext.Provider>
   );
 }

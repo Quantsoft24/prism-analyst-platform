@@ -1,0 +1,75 @@
+/* Agent task checklist — live, ticks off as the agent works. Tokens only →
+   light + dark ([data-theme] in src/styles/globals.css). */
+
+.wrap {
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-deep);
+}
+.count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-mute);
+  font-family: var(--font-mono, monospace);
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--ink-mute);
+  transition: color var(--transition-fast);
+}
+.stepActive { color: var(--ink); font-weight: 500; }
+.stepDone { color: var(--ink-mute); }
+.stepDone .label { text-decoration: line-through; text-decoration-color: var(--line); }
+
+.box {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-on-accent, #fff);
+}
+.stepDone .box { background: var(--accent); border-color: var(--accent); }
+.stepActive .box { border-color: var(--accent); }
+
+.spinner {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: tc-spin 0.7s linear infinite;
+}
+@keyframes tc-spin {
+  to { transform: rotate(360deg); }
+}
+
+.label { line-height: 1.35; }

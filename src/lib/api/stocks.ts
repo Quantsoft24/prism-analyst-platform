@@ -9,7 +9,9 @@
 
 import { keepPreviousData, useQuery, type UseQueryOptions } from "@tanstack/react-query";
 
-import { apiClient } from "./client";
+import { config } from "@/lib/config";
+
+import { apiClient, authHeaders } from "./client";
 
 // ── Wire types (match src/schemas/stock.py) ────────────────────────────────
 
@@ -216,6 +218,35 @@ export function metricValue(p: PricePoint, metric: StockMetric): number | null {
 // ── API ─────────────────────────────────────────────────────────────────────
 
 const base = "/api/v1/stocks";
+
+/**
+ * Fetch a filing PDF through PRISM's auth-gated proxy and return a blob object
+ * URL the viewer can embed at `#page=N`. We can't point an `<iframe>` straight
+ * at the proxy because it requires the auth header (which an iframe can't send),
+ * and we can't point it at the raw BSE/NSE URL (CORS / X-Frame-Options block
+ * embedding). So: authed `fetch` → blob → object URL. The caller MUST
+ * `URL.revokeObjectURL` it on unmount to avoid leaking memory.
+ */
+export async function fetchFilingPdfObjectUrl(
+  pdfUrl: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const url = new URL(`${base}/reports/pdf`, config.apiUrl);
+  url.searchParams.set("url", pdfUrl);
+  const resp = await fetch(url.toString(), { headers: await authHeaders(), signal });
+  if (!resp.ok) {
+    let detail = `HTTP ${resp.status}`;
+    try {
+      const j = await resp.json();
+      if (j && typeof j.detail === "string") detail = j.detail;
+    } catch {
+      // non-JSON error body — keep the status line
+    }
+    throw new Error(detail);
+  }
+  const blob = await resp.blob();
+  return URL.createObjectURL(blob);
+}
 
 export const stocksApi = {
   securities(signal?: AbortSignal): Promise<Security[]> {

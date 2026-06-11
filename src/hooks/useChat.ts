@@ -9,9 +9,11 @@ import {
   type ChartEvent,
   type ChatStreamHandle,
   type Citation,
+  type ClarificationEvent,
   type DataFreshnessEvent,
   type ErrorEvent,
   type FinalAnswer,
+  type PlanStep,
   type ToolNextAction,
 } from "@/lib/api/chat";
 import { conversationKeys, conversationsApi } from "@/lib/api/conversations";
@@ -85,8 +87,13 @@ export interface ChatMessage {
   structured?: FinalAnswer | null;
   /** Charts the agent surfaced during this turn. */
   charts?: AssistantChart[];
+  /** The agent's live task checklist (latest `update_plan`). */
+  plan?: PlanStep[];
   /** Terminal error if the run failed for this assistant turn. */
   error?: ErrorEvent | null;
+  /** Structured clarification the agent is asking — renders an interactive
+   *  picker; the user's choice is sent back as the next message. */
+  clarification?: ClarificationEvent | null;
 }
 
 interface UseChatReturn {
@@ -98,6 +105,9 @@ interface UseChatReturn {
   runMeta: RunMeta;
   send: (query: string) => void;
   followUp: (query: string) => void;
+  /** Answer a pending clarification (the agent's structured question). Sends the
+   *  selection back into the SAME session so the agent resumes with it. */
+  respondToClarification: (answer: string) => void;
   /** Abort the in-flight stream. No-op when phase === "done"/"idle". */
   stop: () => void;
   /** Re-run the most recent user query. Useful after a retriable error. */
@@ -139,9 +149,17 @@ const EMPTY_META: RunMeta = {
  */
 export function useChat(): UseChatReturn {
   const queryClient = useQueryClient();
-  const refreshConversationList = useCallback(() => {
+  // The new conversation row should appear in the sidebar as soon as the run
+  // starts — refresh the LIST only (quota hasn't meaningfully changed yet).
+  const refreshConversationsOnly = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: conversationKeys.list });
-    void queryClient.invalidateQueries({ queryKey: quotaKeys.quota }); // a message consumed quota
+  }, [queryClient]);
+  // A turn finished — refresh the list (preview / last-activity) AND quota
+  // (the message was consumed). One combined refresh per terminal event, so a
+  // turn triggers at most one quota refetch instead of one per event handler.
+  const refreshAfterTurn = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: conversationKeys.list });
+    void queryClient.invalidateQueries({ queryKey: quotaKeys.quota });
   }, [queryClient]);
   const [phase, setPhase] = useState<Phase>("idle");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -243,7 +261,7 @@ export function useChat(): UseChatReturn {
             }));
             // The agent_runs row now exists → the conversation list (sidebar /
             // dashboard / account) should pick it up without a page refresh.
-            refreshConversationList();
+            refreshConversationsOnly();
           },
 
           onAgentThought: (event) => {
@@ -372,6 +390,18 @@ export function useChat(): UseChatReturn {
             );
           },
 
+          onPlan: (event) => {
+            // Latest task checklist — replace (the agent sends the full list each
+            // update). Keep the assistant "thinking" while a plan is active.
+            setMessages((prev) =>
+              updateLastAssistant(prev, (msg) => ({
+                ...msg,
+                isThinking: false,
+                plan: event.steps,
+              })),
+            );
+          },
+
           onToken: (event) => {
             setPhase((p) =>
               p === "thinking" || p === "tools" ? "answering" : p,
@@ -388,7 +418,7 @@ export function useChat(): UseChatReturn {
 
           onFinal: (event) => {
             setPhase("done");
-            refreshConversationList(); // refresh preview / last-activity
+            refreshAfterTurn(); // preview / last-activity + quota consumed
             setRunMeta((m) => ({
               ...m,
               cost_usd: event.cost_usd,
@@ -424,9 +454,25 @@ export function useChat(): UseChatReturn {
             );
           },
 
+          onClarification: (event) => {
+            // The agent paused to ask the user to disambiguate. Terminal for
+            // this turn — store the structured question so the thread renders
+            // the interactive picker; the user's pick resumes the session.
+            setPhase("done");
+            refreshAfterTurn();
+            setMessages((prev) =>
+              updateLastAssistant(prev, (msg) => ({
+                ...msg,
+                isThinking: false,
+                showAnswer: true,
+                clarification: event,
+              })),
+            );
+          },
+
           onError: (event) => {
             setPhase("done");
-            refreshConversationList();
+            refreshAfterTurn();
             setMessages((prev) =>
               updateLastAssistant(prev, (msg) => ({
                 ...msg,
@@ -441,7 +487,7 @@ export function useChat(): UseChatReturn {
 
       streamRef.current.done.finally(() => clearTimeout(workspaceReveal));
     },
-    [cancelInflight, refreshConversationList],
+    [cancelInflight, refreshConversationsOnly, refreshAfterTurn],
   );
 
   const send = useCallback(
@@ -455,6 +501,16 @@ export function useChat(): UseChatReturn {
   const followUp = useCallback(
     (query: string) => {
       startStream(query, true);
+    },
+    [startStream],
+  );
+
+  // Answering a clarification is just a follow-up in the same session — the
+  // selection text (e.g. "Reliance Industries Ltd. (security_id: 2228)") goes
+  // back and the agent resolves it exactly and resumes.
+  const respondToClarification = useCallback(
+    (answer: string) => {
+      startStream(answer, true);
     },
     [startStream],
   );
@@ -570,6 +626,7 @@ export function useChat(): UseChatReturn {
     runMeta,
     send,
     followUp,
+    respondToClarification,
     stop,
     retry,
     reset,
