@@ -24,6 +24,25 @@ function initialsOf(name: string, email: string | null): string {
   return src.slice(0, 2).toUpperCase();
 }
 
+type SupaUser = { email?: string | null; user_metadata?: Record<string, unknown> } | null;
+
+// Dedupe the initial `getUser()` network call across every component that
+// mounts useAuthUser (sidebar chip, chat header, account menu, …). Without
+// this each one hits `/auth/v1/user` separately. Live changes still flow
+// through each component's own `onAuthStateChange` subscription (no network).
+let _initialUserPromise: Promise<SupaUser> | null = null;
+function getInitialUserOnce(
+  supabase: { auth: { getUser: () => Promise<{ data: { user: SupaUser } }> } },
+): Promise<SupaUser> {
+  if (!_initialUserPromise) {
+    _initialUserPromise = supabase.auth
+      .getUser()
+      .then(({ data }) => data.user ?? null)
+      .catch(() => null);
+  }
+  return _initialUserPromise;
+}
+
 /**
  * The current user for the sidebar chip. Auth OFF → the mock user (unchanged).
  * Auth ON → the live Supabase user, kept fresh via onAuthStateChange, plus a
@@ -55,10 +74,17 @@ export function useAuthUser(): AuthUser {
 
     void import("@/lib/supabase/client").then(({ getBrowserSupabase }) => {
       const supabase = getBrowserSupabase();
-      void supabase.auth.getUser().then(({ data }) => apply(data.user ?? null));
-      const { data: sub } = supabase.auth.onAuthStateChange((_event, session) =>
-        apply(session?.user ?? null),
-      );
+      // Shared initial fetch (deduped across components), then live updates.
+      void getInitialUserOnce(supabase).then(apply);
+      const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+        // A real auth transition invalidates the shared initial snapshot.
+        if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
+          _initialUserPromise = session?.user
+            ? Promise.resolve(session.user)
+            : null;
+        }
+        apply(session?.user ?? null);
+      });
       unsub = () => sub.subscription.unsubscribe();
     });
 
