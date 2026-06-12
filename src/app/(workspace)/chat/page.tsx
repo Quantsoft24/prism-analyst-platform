@@ -22,6 +22,7 @@ export default function ChatPage() {
       onFollowUp={chat.followUp}
       onStop={chat.stop}
       onRetry={chat.retry}
+      onRespondClarification={chat.respondToClarification}
     />
   ) : null;
 }

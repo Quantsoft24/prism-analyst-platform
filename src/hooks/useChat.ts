@@ -9,9 +9,11 @@ import {
   type ChartEvent,
   type ChatStreamHandle,
   type Citation,
+  type ClarificationEvent,
   type DataFreshnessEvent,
   type ErrorEvent,
   type FinalAnswer,
+  type PlanStep,
   type ToolNextAction,
 } from "@/lib/api/chat";
 import { conversationKeys, conversationsApi } from "@/lib/api/conversations";
@@ -85,8 +87,17 @@ export interface ChatMessage {
   structured?: FinalAnswer | null;
   /** Charts the agent surfaced during this turn. */
   charts?: AssistantChart[];
+  /** The agent's live task checklist (latest `update_plan`). */
+  plan?: PlanStep[];
   /** Terminal error if the run failed for this assistant turn. */
   error?: ErrorEvent | null;
+  /** Structured clarification the agent is asking — renders an interactive
+   *  picker; the user's choice is sent back as the next message. */
+  clarification?: ClarificationEvent | null;
+  /** Replay-only: this turn ENDED on a clarification (the agent asked, the user
+   *  answered on the next turn). Rendered like the live view — pills only, no
+   *  answer block / Copy / Open-report footer / empty-answer fallback. */
+  isClarificationTurn?: boolean;
 }
 
 interface UseChatReturn {
@@ -98,6 +109,9 @@ interface UseChatReturn {
   runMeta: RunMeta;
   send: (query: string) => void;
   followUp: (query: string) => void;
+  /** Answer a pending clarification (the agent's structured question). Sends the
+   *  selection back into the SAME session so the agent resumes with it. */
+  respondToClarification: (answer: string) => void;
   /** Abort the in-flight stream. No-op when phase === "done"/"idle". */
   stop: () => void;
   /** Re-run the most recent user query. Useful after a retriable error. */
@@ -139,9 +153,17 @@ const EMPTY_META: RunMeta = {
  */
 export function useChat(): UseChatReturn {
   const queryClient = useQueryClient();
-  const refreshConversationList = useCallback(() => {
+  // The new conversation row should appear in the sidebar as soon as the run
+  // starts — refresh the LIST only (quota hasn't meaningfully changed yet).
+  const refreshConversationsOnly = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: conversationKeys.list });
-    void queryClient.invalidateQueries({ queryKey: quotaKeys.quota }); // a message consumed quota
+  }, [queryClient]);
+  // A turn finished — refresh the list (preview / last-activity) AND quota
+  // (the message was consumed). One combined refresh per terminal event, so a
+  // turn triggers at most one quota refetch instead of one per event handler.
+  const refreshAfterTurn = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: conversationKeys.list });
+    void queryClient.invalidateQueries({ queryKey: quotaKeys.quota });
   }, [queryClient]);
   const [phase, setPhase] = useState<Phase>("idle");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -243,7 +265,7 @@ export function useChat(): UseChatReturn {
             }));
             // The agent_runs row now exists → the conversation list (sidebar /
             // dashboard / account) should pick it up without a page refresh.
-            refreshConversationList();
+            refreshConversationsOnly();
           },
 
           onAgentThought: (event) => {
@@ -372,6 +394,18 @@ export function useChat(): UseChatReturn {
             );
           },
 
+          onPlan: (event) => {
+            // Latest task checklist — replace (the agent sends the full list each
+            // update). Keep the assistant "thinking" while a plan is active.
+            setMessages((prev) =>
+              updateLastAssistant(prev, (msg) => ({
+                ...msg,
+                isThinking: false,
+                plan: event.steps,
+              })),
+            );
+          },
+
           onToken: (event) => {
             setPhase((p) =>
               p === "thinking" || p === "tools" ? "answering" : p,
@@ -388,7 +422,7 @@ export function useChat(): UseChatReturn {
 
           onFinal: (event) => {
             setPhase("done");
-            refreshConversationList(); // refresh preview / last-activity
+            refreshAfterTurn(); // preview / last-activity + quota consumed
             setRunMeta((m) => ({
               ...m,
               cost_usd: event.cost_usd,
@@ -424,9 +458,25 @@ export function useChat(): UseChatReturn {
             );
           },
 
+          onClarification: (event) => {
+            // The agent paused to ask the user to disambiguate. Terminal for
+            // this turn — store the structured question so the thread renders
+            // the interactive picker; the user's pick resumes the session.
+            setPhase("done");
+            refreshAfterTurn();
+            setMessages((prev) =>
+              updateLastAssistant(prev, (msg) => ({
+                ...msg,
+                isThinking: false,
+                showAnswer: true,
+                clarification: event,
+              })),
+            );
+          },
+
           onError: (event) => {
             setPhase("done");
-            refreshConversationList();
+            refreshAfterTurn();
             setMessages((prev) =>
               updateLastAssistant(prev, (msg) => ({
                 ...msg,
@@ -441,7 +491,7 @@ export function useChat(): UseChatReturn {
 
       streamRef.current.done.finally(() => clearTimeout(workspaceReveal));
     },
-    [cancelInflight, refreshConversationList],
+    [cancelInflight, refreshConversationsOnly, refreshAfterTurn],
   );
 
   const send = useCallback(
@@ -455,6 +505,16 @@ export function useChat(): UseChatReturn {
   const followUp = useCallback(
     (query: string) => {
       startStream(query, true);
+    },
+    [startStream],
+  );
+
+  // Answering a clarification is just a follow-up in the same session — the
+  // selection text (e.g. "Reliance Industries Ltd. (security_id: 2228)") goes
+  // back and the agent resolves it exactly and resumes.
+  const respondToClarification = useCallback(
+    (answer: string) => {
+      startStream(answer, true);
     },
     [startStream],
   );
@@ -518,13 +578,26 @@ export function useChat(): UseChatReturn {
       const msgs: ChatMessage[] = [];
       for (const t of detail.turns) {
         msgs.push({ role: "user", text: t.user_input });
+        // A turn that ended on a clarification is NOT an answer — render it like
+        // the live view (pills only): no answer block, no Copy / Open-report
+        // footer. The user's pick is the next user message; a still-pending last
+        // turn surfaces the docked card via the hydrated `clarification`.
+        const isClarificationTurn = t.status === "awaiting_clarification";
         msgs.push({
           ...newAssistantStub(),
           isThinking: false,
-          showAnswer: true,
-          text: t.final_answer ?? "",
-          streamedText: t.final_answer ?? "",
+          showAnswer: !isClarificationTurn,
+          text: isClarificationTurn ? "" : (t.final_answer ?? ""),
+          streamedText: isClarificationTurn ? "" : (t.final_answer ?? ""),
           toolCalls: (t.tool_trace ?? []).map(traceToToolCall),
+          // Restore the rich view persisted with the turn (citations/confidence/
+          // freshness/sources/follow-up chips via `structured`, the task
+          // checklist via `plan`, and a resumable pending question via
+          // `clarification`) so a reopened conversation matches what was live.
+          structured: t.structured ?? null,
+          plan: t.plan && t.plan.length > 0 ? t.plan : undefined,
+          clarification: t.clarification ?? null,
+          isClarificationTurn,
           error:
             t.status === "failed"
               ? {
@@ -570,11 +643,22 @@ export function useChat(): UseChatReturn {
     runMeta,
     send,
     followUp,
+    respondToClarification,
     stop,
     retry,
     reset,
     loadConversation,
   };
+}
+
+/** Mirror of the backend `_freshness_source_label` so a replayed tool's
+ *  freshness chip reads the same as it did live. */
+function freshnessLabel(tool: string): string {
+  if (tool.startsWith("stock_filings")) return "filings catalog";
+  if (tool === "stock_technicals") return "market data";
+  if (tool.startsWith("bmc_")) return "business model canvas";
+  if (tool === "web_search") return "web search";
+  return tool;
 }
 
 /** Map a stored tool_trace entry to a (completed) ToolCallState for replay. */
@@ -583,17 +667,31 @@ function traceToToolCall(entry: Record<string, unknown>, i: number): ToolCallSta
   const callId = typeof entry.call_id === "string" ? entry.call_id : `${tool}-${i}`;
   const args = (entry.args && typeof entry.args === "object" ? entry.args : {}) as Record<string, unknown>;
   const latency = typeof entry.latency_ms === "number" ? entry.latency_ms : null;
+  // Reconstruct the data-freshness chip from the stored tool response so the
+  // "N sources" count (citations + data-sources) matches the live render — the
+  // `as_of` lives in tool_trace[].response.data_freshness; the source label is
+  // re-derived from the tool name (it isn't stored).
+  const response =
+    entry.response && typeof entry.response === "object"
+      ? (entry.response as Record<string, unknown>)
+      : null;
+  const asOf =
+    response && typeof response.data_freshness === "string"
+      ? (response.data_freshness as string)
+      : null;
+  const summary =
+    typeof entry.result_summary === "string" ? entry.result_summary : null;
   return {
     call_id: callId,
     tool,
     args,
     status: "done",
-    result_summary: null,
+    result_summary: summary,
     error: null,
     error_code: null,
     next_action: null,
     latency_ms: latency,
-    freshness: null,
+    freshness: asOf ? { source: freshnessLabel(tool), as_of: asOf } : null,
     retry_attempt: 0,
   };
 }

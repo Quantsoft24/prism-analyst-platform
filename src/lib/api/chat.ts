@@ -141,6 +141,9 @@ export interface Citation {
   source_kind: "filing" | "web" | "bmc" | "tool";
   as_of: string | null;
   tool_call_id: string | null;
+  /** Page in the source PDF (filings) — deep-links to the exact page in the
+   *  Report-tab viewer. Populated in Phase 6. */
+  page?: number | null;
 }
 
 /** A headline KPI surfaced in the workspace Report tab.
@@ -182,6 +185,8 @@ export interface FinalAnswer {
   /** Named sections (Executive summary, Anomaly flags, etc.) that come
    *  AFTER the KPI grid and BEFORE the prose. Optional. */
   sections: FinalSection[];
+  /** 2-3 suggested next questions — rendered as clickable chips. Optional. */
+  suggestions?: string[];
 }
 
 export interface FinalEvent {
@@ -204,16 +209,67 @@ export interface ErrorEvent {
   agent_run_id: string | null;
 }
 
+/** One selectable answer in a clarification question. `value` is sent back to
+ *  the agent when chosen (a security_id for company picks). */
+export interface ClarificationOption {
+  id: string;
+  label: string;
+  hint: string | null;
+  value: string | number;
+}
+
+/** One question in a clarification form. Several can be asked together (one per
+ *  ambiguous company in a comparison) and answered in sequence in one card. */
+export interface ClarificationQuestion {
+  id: string;
+  question: string;
+  mode: "single_select" | "multi_select" | "open_text";
+  options: ClarificationOption[];
+  allow_search: boolean;
+}
+
+/** Terminal event: the agent needs the user to disambiguate before it can
+ *  proceed. The UI renders a form with one OR MORE `questions` (a stepper) +
+ *  a securities search box; the combined answer is sent as the next message in
+ *  the same session and the agent resumes with it. */
+export interface ClarificationEvent {
+  type: "clarification";
+  agent_run_id: string | null;
+  /** The form's questions (one or many). Prefer this over the single fields. */
+  questions: ClarificationQuestion[];
+  /** Back-compat single-question mirror (= questions[0]). */
+  question: string;
+  mode: "single_select" | "multi_select" | "open_text";
+  options: ClarificationOption[];
+  allow_search: boolean;
+}
+
+/** One task in the agent's visible checklist. */
+export interface PlanStep {
+  id: string;
+  title: string;
+  status: "pending" | "in_progress" | "done";
+}
+
+/** The agent's task list (Claude-Code-style). Emitted when the agent declares or
+ *  updates its plan; the UI renders the latest `steps` as checkboxes. */
+export interface PlanEvent {
+  type: "plan";
+  steps: PlanStep[];
+}
+
 export type ChatEvent =
   | MetaEvent
   | ToolCallEvent
   | ToolResultEvent
   | TokenEvent
+  | PlanEvent
   | AgentThoughtEvent
   | ToolRetryEvent
   | DataFreshnessEvent
   | ChartEvent
   | FinalEvent
+  | ClarificationEvent
   | ErrorEvent;
 
 export interface ChatRunRequest {
@@ -231,15 +287,17 @@ export interface ChatStreamHandlers {
   onToolRetry?: (event: ToolRetryEvent) => void;
   onDataFreshness?: (event: DataFreshnessEvent) => void;
   onChart?: (event: ChartEvent) => void;
+  onPlan?: (event: PlanEvent) => void;
   onFinal?: (event: FinalEvent) => void;
+  onClarification?: (event: ClarificationEvent) => void;
   onError?: (event: ErrorEvent) => void;
   /** Catch-all — useful for logging or future event types. */
   onEvent?: (event: ChatEvent) => void;
 }
 
 export interface ChatStreamHandle {
-  /** Resolves with the terminal event (``final`` or ``error``). */
-  done: Promise<FinalEvent | ErrorEvent | null>;
+  /** Resolves with the terminal event (``final``, ``clarification``, or ``error``). */
+  done: Promise<FinalEvent | ClarificationEvent | ErrorEvent | null>;
   /** Cancel the stream and the underlying HTTP request. */
   abort: () => void;
 }
@@ -265,7 +323,7 @@ export function runChatStream(
   const controller = new AbortController();
   const url = new URL("/api/v1/chat/run", config.apiUrl).toString();
 
-  const done = (async (): Promise<FinalEvent | ErrorEvent | null> => {
+  const done = (async (): Promise<FinalEvent | ClarificationEvent | ErrorEvent | null> => {
     // Same auth as apiClient: the Supabase bearer token when signed in (so the
     // backend attributes this agent_run to the user → it shows in history), or
     // the dev-firm header when auth is off.
@@ -300,7 +358,7 @@ export function runChatStream(
       return errEvent;
     }
 
-    let terminal: FinalEvent | ErrorEvent | null = null;
+    let terminal: FinalEvent | ClarificationEvent | ErrorEvent | null = null;
     for await (const event of parseEventStream(response.body)) {
       handlers.onEvent?.(event);
       switch (event.type) {
@@ -328,8 +386,15 @@ export function runChatStream(
         case "chart":
           handlers.onChart?.(event);
           break;
+        case "plan":
+          handlers.onPlan?.(event);
+          break;
         case "final":
           handlers.onFinal?.(event);
+          terminal = event;
+          break;
+        case "clarification":
+          handlers.onClarification?.(event);
           terminal = event;
           break;
         case "error":

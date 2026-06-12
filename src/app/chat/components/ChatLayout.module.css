@@ -453,6 +453,32 @@
   box-shadow: none;
 }
 
+/* Inline `[Company | p.N]` citation in the prose — clickable, opens the PDF
+   at that page in the Report drawer. Reads as a citation, not a button. */
+.citeInline {
+  display: inline;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--accent-deep);
+  font: inherit;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 3px;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+.citeInline:hover {
+  background: var(--accent-soft);
+  box-shadow: none;
+}
+/* Same marker when we couldn't resolve a PDF link — plain, non-clickable. */
+.citeInlineText {
+  color: var(--ink-mute);
+  white-space: nowrap;
+}
+
 /* ── Composer — Lakshya mockup pattern ──────────────────────────────────
  * .composerBar (border-top, padding) → .composerBox (border, focus-glow) →
  * textarea + composerToolbar with composerTag chips + dark composerSend.
@@ -1191,6 +1217,13 @@
   color: var(--accent, #8b6f3f);
   text-decoration: none;
   font-weight: 600;
+  /* works as both <a> and <button> */
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
 }
 .sourceLink:hover {
   text-decoration: underline;
@@ -1265,6 +1298,32 @@
 .answerProse :global(th) {
   background: var(--bg-tint, rgba(0, 0, 0, 0.03));
   font-weight: 600;
+}
+
+/* Suggested follow-up chips (under the latest answer) — themed light/dark. */
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.suggestionChip {
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--accent-deep);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast),
+    color var(--transition-fast);
+}
+.suggestionChip:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
 }
 .answerProse :global(blockquote) {
   margin: 0.6em 0;
@@ -2278,6 +2337,11 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4);
+}
+/* Push Copy to the right edge so sources · open-report sit left and Copy
+   sits right — all on one horizontal row. */
+.footerCopy {
+  margin-left: auto;
 }
 .footerToggle {
   display: inline-flex;
