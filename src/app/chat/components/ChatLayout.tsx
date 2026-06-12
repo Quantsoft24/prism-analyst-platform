@@ -166,35 +166,30 @@ function findFilingCitation(
   );
 }
 
-/** Inline `[Company | p.N]` citation in the answer prose → a clickable chip
- *  that opens the source PDF at that page in the Report drawer. */
+/** Inline `[Company | p.N]` citation in the answer prose. Renders as the SAME
+ *  compact numbered badge + hover popover as a `[n]` citation — numbered by the
+ *  source's position in the Sources list, so the inline badge, the popover, and
+ *  the Sources row all line up. (Replaces the old verbose "[Company | p.N]"
+ *  chip.) Falls back to a small muted page marker only when no PDF resolves. */
 function FilingCiteMarker({
-  label,
   company,
   page,
   citations,
 }: {
-  label: string;
   company: string;
   page: number;
   citations: Citation[];
 }) {
-  const openFilingPdf = useContext(FilingPdfContext);
   const cite = findFilingCitation(citations, company, page);
-  if (!cite || !openFilingPdf) {
-    return <span className={styles.citeInlineText}>{label}</span>;
+  if (cite) {
+    return <CitationMarker index={citations.indexOf(cite) + 1} citation={cite} />;
   }
+  // No resolvable PDF for this page — a compact, muted page marker rather than
+  // the raw "[Company | p.N]" text.
   return (
-    <button
-      type="button"
-      className={styles.citeInline}
-      title={`Open PDF at p.${page}`}
-      onClick={() =>
-        openFilingPdf({ url: cite.url, page: cite.page ?? page, label: cite.label || label })
-      }
-    >
-      {label}
-    </button>
+    <sup className={styles.citeInlineText} title={`${company} · p.${page}`}>
+      p.{page}
+    </sup>
   );
 }
 
@@ -218,7 +213,6 @@ function renderTextWithCitations(
       return (
         <FilingCiteMarker
           key={i}
-          label={part}
           company={fileMatch[1].trim()}
           page={Number(fileMatch[2])}
           citations={citations}
@@ -302,29 +296,11 @@ function AnswerBlock({
   shimmer: boolean;
   structured: { confidence?: "high" | "medium" | "low"; data_freshness?: string | null } | null;
 }) {
-  const { toast } = useToast();
   const components = React.useMemo(
     () => makeMarkdownComponents(citations),
     [citations],
   );
 
-  const handleCopy = async () => {
-    try {
-      // Plain answer + citation footnotes appended as markdown.
-      const footnotes = citations.length
-        ? "\n\n---\n" +
-          citations
-            .map((c, i) => `[${i + 1}] ${c.label}${c.url ? ` — ${c.url}` : ""}`)
-            .join("\n")
-        : "";
-      await navigator.clipboard.writeText(text + footnotes);
-      toast("Answer copied", "success");
-    } catch {
-      toast("Copy failed", "error");
-    }
-  };
-
-  const confidence = structured?.confidence;
   const freshness = structured?.data_freshness;
 
   return (
@@ -335,55 +311,13 @@ function AnswerBlock({
         </ReactMarkdown>
         {shimmer && <span className={styles.streamCursor} />}
       </div>
-      {(confidence || freshness || citations.length > 0 || !shimmer) && (
+      {freshness && (
         <div className={styles.answerFooter}>
           <div className={styles.answerChips}>
-            {confidence && (
-              <span
-                className={cn(
-                  styles.confidenceChip,
-                  confidence === "high" && styles.confidenceHigh,
-                  confidence === "medium" && styles.confidenceMedium,
-                  confidence === "low" && styles.confidenceLow,
-                )}
-                title="Agent's self-reported confidence"
-              >
-                {confidence} confidence
-              </span>
-            )}
-            {freshness && (
-              <span className={styles.freshnessChip} title="Earliest source date">
-                as of {freshness}
-              </span>
-            )}
-            {citations.length > 0 && (
-              <span className={styles.citeCountChip}>
-                {citations.length} citation{citations.length === 1 ? "" : "s"}
-              </span>
-            )}
+            <span className={styles.freshnessChip} title="Earliest source date">
+              as of {freshness}
+            </span>
           </div>
-          {!shimmer && (
-            <button
-              type="button"
-              className={styles.copyBtn}
-              onClick={handleCopy}
-              aria-label="Copy answer to clipboard"
-              title="Copy"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <rect x="9" y="9" width="13" height="13" rx="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-              Copy
-            </button>
-          )}
         </div>
       )}
     </div>
@@ -656,16 +590,35 @@ function AnswerFooter({
   tools,
   showWorkspace,
   onOpenReport,
+  text,
 }: {
   citations: Citation[];
   tools: ToolCallState[];
   showWorkspace: boolean;
   onOpenReport: () => void;
+  text: string;
 }) {
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const dataSources = tools.filter((t) => t.freshness);
   const total = citations.length + dataSources.length;
-  if (total === 0 && !showWorkspace) return null;
+
+  const handleCopy = async () => {
+    try {
+      // Plain answer + citation footnotes appended as markdown.
+      const footnotes = citations.length
+        ? "\n\n---\n" +
+          citations
+            .map((c, i) => `[${i + 1}] ${c.label}${c.url ? ` — ${c.url}` : ""}`)
+            .join("\n")
+        : "";
+      await navigator.clipboard.writeText(text + footnotes);
+      toast("Answer copied", "success");
+    } catch {
+      toast("Copy failed", "error");
+    }
+  };
+
   return (
     <div className={styles.answerFooterBar}>
       <div className={styles.answerFooterRow}>
@@ -699,6 +652,19 @@ function AnswerFooter({
             Open report ↗
           </button>
         )}
+        <button
+          type="button"
+          className={cn(styles.copyBtn, styles.footerCopy)}
+          onClick={handleCopy}
+          aria-label="Copy answer to clipboard"
+          title="Copy"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+          Copy
+        </button>
       </div>
       {open && total > 0 && (
         <div className={styles.sourcesList}>
@@ -1562,6 +1528,7 @@ export default function ChatLayout({
                         tools={tools}
                         showWorkspace={showWorkspace}
                         onOpenReport={() => setDrawerOpen(true)}
+                        text={msg.streamedText || msg.text}
                       />
                     )}
                     {/* Suggested follow-ups — only on the latest answer, idle. */}
@@ -1592,6 +1559,7 @@ export default function ChatLayout({
                 {phase === "done" &&
                   !msg.error &&
                   !msg.clarification &&
+                  !msg.isClarificationTurn &&
                   !msg.streamedText &&
                   !msg.text &&
                   tools.length > 0 && (

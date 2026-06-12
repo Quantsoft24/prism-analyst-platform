@@ -41,7 +41,11 @@
 }
 .stepActive { color: var(--ink); font-weight: 500; }
 .stepDone { color: var(--ink-mute); }
-.stepDone .label { text-decoration: line-through; text-decoration-color: var(--line); }
+.stepDone .label {
+  text-decoration: line-through;
+  text-decoration-color: var(--ink-mute);
+  text-decoration-thickness: 1.5px;
+}
 
 .box {
   flex-shrink: 0;

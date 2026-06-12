@@ -94,6 +94,10 @@ export interface ChatMessage {
   /** Structured clarification the agent is asking — renders an interactive
    *  picker; the user's choice is sent back as the next message. */
   clarification?: ClarificationEvent | null;
+  /** Replay-only: this turn ENDED on a clarification (the agent asked, the user
+   *  answered on the next turn). Rendered like the live view — pills only, no
+   *  answer block / Copy / Open-report footer / empty-answer fallback. */
+  isClarificationTurn?: boolean;
 }
 
 interface UseChatReturn {
@@ -574,13 +578,26 @@ export function useChat(): UseChatReturn {
       const msgs: ChatMessage[] = [];
       for (const t of detail.turns) {
         msgs.push({ role: "user", text: t.user_input });
+        // A turn that ended on a clarification is NOT an answer — render it like
+        // the live view (pills only): no answer block, no Copy / Open-report
+        // footer. The user's pick is the next user message; a still-pending last
+        // turn surfaces the docked card via the hydrated `clarification`.
+        const isClarificationTurn = t.status === "awaiting_clarification";
         msgs.push({
           ...newAssistantStub(),
           isThinking: false,
-          showAnswer: true,
-          text: t.final_answer ?? "",
-          streamedText: t.final_answer ?? "",
+          showAnswer: !isClarificationTurn,
+          text: isClarificationTurn ? "" : (t.final_answer ?? ""),
+          streamedText: isClarificationTurn ? "" : (t.final_answer ?? ""),
           toolCalls: (t.tool_trace ?? []).map(traceToToolCall),
+          // Restore the rich view persisted with the turn (citations/confidence/
+          // freshness/sources/follow-up chips via `structured`, the task
+          // checklist via `plan`, and a resumable pending question via
+          // `clarification`) so a reopened conversation matches what was live.
+          structured: t.structured ?? null,
+          plan: t.plan && t.plan.length > 0 ? t.plan : undefined,
+          clarification: t.clarification ?? null,
+          isClarificationTurn,
           error:
             t.status === "failed"
               ? {
@@ -634,23 +651,47 @@ export function useChat(): UseChatReturn {
   };
 }
 
+/** Mirror of the backend `_freshness_source_label` so a replayed tool's
+ *  freshness chip reads the same as it did live. */
+function freshnessLabel(tool: string): string {
+  if (tool.startsWith("stock_filings")) return "filings catalog";
+  if (tool === "stock_technicals") return "market data";
+  if (tool.startsWith("bmc_")) return "business model canvas";
+  if (tool === "web_search") return "web search";
+  return tool;
+}
+
 /** Map a stored tool_trace entry to a (completed) ToolCallState for replay. */
 function traceToToolCall(entry: Record<string, unknown>, i: number): ToolCallState {
   const tool = typeof entry.tool === "string" ? entry.tool : "tool";
   const callId = typeof entry.call_id === "string" ? entry.call_id : `${tool}-${i}`;
   const args = (entry.args && typeof entry.args === "object" ? entry.args : {}) as Record<string, unknown>;
   const latency = typeof entry.latency_ms === "number" ? entry.latency_ms : null;
+  // Reconstruct the data-freshness chip from the stored tool response so the
+  // "N sources" count (citations + data-sources) matches the live render — the
+  // `as_of` lives in tool_trace[].response.data_freshness; the source label is
+  // re-derived from the tool name (it isn't stored).
+  const response =
+    entry.response && typeof entry.response === "object"
+      ? (entry.response as Record<string, unknown>)
+      : null;
+  const asOf =
+    response && typeof response.data_freshness === "string"
+      ? (response.data_freshness as string)
+      : null;
+  const summary =
+    typeof entry.result_summary === "string" ? entry.result_summary : null;
   return {
     call_id: callId,
     tool,
     args,
     status: "done",
-    result_summary: null,
+    result_summary: summary,
     error: null,
     error_code: null,
     next_action: null,
     latency_ms: latency,
-    freshness: null,
+    freshness: asOf ? { source: freshnessLabel(tool), as_of: asOf } : null,
     retry_attempt: 0,
   };
 }

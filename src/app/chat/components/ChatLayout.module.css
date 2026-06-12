@@ -2338,6 +2338,11 @@
   align-items: center;
   gap: var(--space-4);
 }
+/* Push Copy to the right edge so sources · open-report sit left and Copy
+   sits right — all on one horizontal row. */
+.footerCopy {
+  margin-left: auto;
+}
 .footerToggle {
   display: inline-flex;
   align-items: center;

@@ -11,7 +11,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { RECENT_CHATS } from "@/lib/mockData";
 import { apiClient } from "./client";
-import { isMockModeEnabled } from "./chat";
+import {
+  isMockModeEnabled,
+  type ClarificationEvent,
+  type FinalAnswer,
+  type PlanStep,
+} from "./chat";
 
 export interface ConversationSummary {
   session_id: string;
@@ -29,6 +34,12 @@ export interface ConversationTurn {
   status: string;
   created_at: string;
   tool_trace: Array<Record<string, unknown>> | null;
+  /** Rich view restored from the backend's result_payload so replay matches the
+   *  live render (citations/confidence/freshness/sources/follow-ups, task
+   *  checklist, pending question). Absent/empty on legacy rows. */
+  structured?: FinalAnswer | null;
+  plan?: PlanStep[];
+  clarification?: ClarificationEvent | null;
 }
 
 export interface ConversationDetail {
