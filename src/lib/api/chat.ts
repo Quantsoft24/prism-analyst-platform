@@ -199,6 +199,9 @@ export interface FinalEvent {
   input_tokens: number;
   output_tokens: number;
   latency_ms: number;
+  /** The model hit its output-token cap (finish_reason=MAX_TOKENS) → the answer
+   *  is cut off and the UI offers "Continue generating". Absent on old payloads. */
+  truncated?: boolean;
 }
 
 export interface ErrorEvent {

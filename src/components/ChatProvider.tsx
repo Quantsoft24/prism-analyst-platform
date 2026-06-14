@@ -1,22 +1,24 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { useChat } from "@/hooks/useChat";
 import { useToast } from "@/components/Toast";
 import { isMockModeEnabled } from "@/lib/api/chat";
 import { RECENT_CHAT_QUERIES } from "@/lib/mockData";
 
-/** Recognize `@bmc TICKER` / "business model canvas of TICKER" in a query.
- *  Returns the ticker (uppercased) if the message is a BMC request, else null. */
+/** Recognize the explicit `@bmc TICKER` shortcut. Returns the ticker (uppercased)
+ *  for a direct jump to the canvas, else null.
+ *
+ *  NOTE: natural-language requests ("business model of X") deliberately do NOT
+ *  match here — they route to the chat agent, which resolves the RIGHT entity
+ *  (clarifying ambiguous names like "Adani") and runs the BMC tool, then surfaces
+ *  an "Open full canvas →" handoff card pointing at the resolved symbol. A raw
+ *  redirect with an unresolved/ambiguous term just 404s on /bmc. */
 function parseBmcIntent(query: string): string | null {
-  const q = query.trim();
-  const at = q.match(/^@bmc\s+([A-Za-z0-9&.-]{1,32})\b/i);
-  if (at) return at[1].toUpperCase();
-  const phrase = q.match(/business model(?:\s+canvas)?\s+(?:of|for)\s+([A-Za-z0-9&.-]{1,32})\b/i);
-  if (phrase) return phrase[1].toUpperCase();
-  return null;
+  const at = query.trim().match(/^@bmc\s+([A-Za-z0-9&.-]{1,32})\b/i);
+  return at ? at[1].toUpperCase() : null;
 }
 
 /** Navigation-aware chat actions, callable from any view. Stable identities
@@ -25,6 +27,9 @@ function parseBmcIntent(query: string): string | null {
 interface ChatActions {
   /** Ticker captured from a `@bmc` intent, read by the BMC route. */
   bmcTicker: string | null;
+  /** The currently-open conversation's session_id (null on a fresh/ask screen).
+   *  Lets the sidebar highlight which recent chat is open. */
+  activeConversationId: string | null;
   /** Run a query: BMC intents open the canvas, everything else routes to chat. */
   sendQuery: (query: string) => void;
   /** Reset the conversation and go to the chat (ask) screen. */
@@ -45,13 +50,14 @@ const ChatActionsContext = React.createContext<ChatActions | null>(null);
  */
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const chat = useChat();
   const { toast } = useToast();
   const [bmcTicker, setBmcTicker] = React.useState<string | null>(null);
 
   // These are stable across renders (useChat memoises them), so the actions
   // below stay stable too.
-  const { send, reset, loadConversation } = chat;
+  const { send, reset } = chat;
 
   const sendQuery = React.useCallback(
     (query: string) => {
@@ -85,17 +91,30 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         toast("Resuming research…", "info");
         return;
       }
-      // Real mode: `id` is a session_id → replay & resume the conversation.
-      void loadConversation(id).catch(() => toast("Couldn't open that conversation.", "error"));
-      router.push("/chat");
-      toast("Opening conversation…", "info");
+      // Real mode: `id` is a session_id → navigate to its URL; the
+      // /chat/[sessionId] route replays & resumes the conversation.
+      router.push(`/chat/${encodeURIComponent(id)}`);
     },
-    [send, loadConversation, router, toast],
+    [send, router, toast],
   );
 
+  // Primitive string → the memo (and the sidebar highlight) only update when the
+  // open conversation actually changes, not on every streamed token.
+  const activeConversationId = chat.runMeta.session_id ?? null;
+
+  // When a NEW chat acquires its session_id, reflect it in the URL with a
+  // `replace` (no history entry, no remount) so refresh + share + back/forward
+  // work. Only upgrades the bare `/chat` route — never touches other tabs or an
+  // already-addressed `/chat/{id}`.
+  React.useEffect(() => {
+    if (activeConversationId && pathname === "/chat") {
+      router.replace(`/chat/${encodeURIComponent(activeConversationId)}`);
+    }
+  }, [activeConversationId, pathname, router]);
+
   const actions = React.useMemo<ChatActions>(
-    () => ({ bmcTicker, sendQuery, newResearch, sendRecent }),
-    [bmcTicker, sendQuery, newResearch, sendRecent],
+    () => ({ bmcTicker, activeConversationId, sendQuery, newResearch, sendRecent }),
+    [bmcTicker, activeConversationId, sendQuery, newResearch, sendRecent],
   );
 
   return (

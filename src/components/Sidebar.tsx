@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { type NavView, NAV_ITEMS } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { isMockModeEnabled, setMockMode } from "@/lib/api/chat";
 import { useRecentConversations } from "@/lib/api/conversations";
 import { useAuthUser } from "@/lib/auth/useAuthUser";
@@ -127,6 +128,8 @@ const PlusIcon = () => (
 /* ── Props ── */
 interface SidebarProps {
   activeView: NavView;
+  /** session_id of the open conversation — highlights its recent row. */
+  activeConversationId?: string | null;
   onNavigate: (view: NavView) => void;
   onNewResearch: () => void;
   onRecentChat: (id: string) => void;
@@ -143,6 +146,7 @@ interface SidebarProps {
 /* ── Component ── */
 export default function Sidebar({
   activeView,
+  activeConversationId,
   onNavigate,
   onNewResearch,
   onRecentChat,
@@ -154,7 +158,10 @@ export default function Sidebar({
   onToggleCollapsed,
 }: SidebarProps) {
   const authUser = useAuthUser();
-  const recents = useRecentConversations();
+  const [recentSearch, setRecentSearch] = React.useState("");
+  const debouncedSearch = useDebouncedValue(recentSearch, 300);
+  const recents = useRecentConversations(debouncedSearch);
+  const showRecentSearch = recents.items.length > 0 || recentSearch.trim().length > 0;
   const handleNavClick = (view: NavView) => {
     onNavigate(view);
     onClose();
@@ -266,15 +273,43 @@ export default function Sidebar({
         {!collapsed && (
           <>
             <div className={styles.navSection}>Recent</div>
+            {showRecentSearch && (
+              <div className={styles.recentSearch}>
+                <svg className={styles.recentSearchIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  className={styles.recentSearchInput}
+                  value={recentSearch}
+                  onChange={(e) => setRecentSearch(e.target.value)}
+                  placeholder="Search conversations…"
+                  aria-label="Search conversations"
+                />
+                {recentSearch && (
+                  <button
+                    className={styles.recentSearchClear}
+                    onClick={() => setRecentSearch("")}
+                    aria-label="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
             {recents.loading && <div className={styles.navRecent}>Loading…</div>}
             {!recents.loading && recents.items.length === 0 && (
-              <div className={styles.navRecentEmpty}>No conversations yet</div>
+              <div className={styles.navRecentEmpty}>
+                {debouncedSearch.trim() ? "No matching conversations" : "No conversations yet"}
+              </div>
             )}
             {recents.items.map((chat) => (
               <ConversationRow
                 key={chat.id}
                 id={chat.id}
                 label={chat.label}
+                active={!!activeConversationId && chat.id === activeConversationId}
+                pinned={chat.pinned}
                 canManage={!recents.isMock}
                 onOpen={() => {
                   onRecentChat(chat.id);
@@ -375,18 +410,22 @@ export default function Sidebar({
 function ConversationRow({
   id,
   label,
+  active,
+  pinned,
   canManage,
   onOpen,
 }: {
   id: string;
   label: string;
+  active: boolean;
+  pinned: boolean;
   canManage: boolean;
   onOpen: () => void;
 }) {
   return (
-    <div className={styles.navRecentRow}>
+    <div className={cn(styles.navRecentRow, active && styles.navRecentRowActive)}>
       <div
-        className={styles.navRecent}
+        className={cn(styles.navRecent, active && styles.navRecentActive)}
         onClick={onOpen}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -396,12 +435,30 @@ function ConversationRow({
         }}
         role="button"
         tabIndex={0}
+        aria-current={active ? "page" : undefined}
         title={label}
       >
+        {pinned && (
+          <svg
+            className={styles.navRecentPin}
+            viewBox="0 0 24 24"
+            width="11"
+            height="11"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M12 17v5M9 10.76V4h6v6.76a2 2 0 0 0 .59 1.42L17 13.5V15H7v-1.5l1.41-1.32A2 2 0 0 0 9 10.76z" />
+          </svg>
+        )}
         {label}
       </div>
       {canManage && (
-        <ConversationActionsMenu id={id} label={label} buttonClassName={styles.navRecentMenuBtn} />
+        <ConversationActionsMenu
+          id={id}
+          label={label}
+          pinned={pinned}
+          buttonClassName={styles.navRecentMenuBtn}
+        />
       )}
     </div>
   );

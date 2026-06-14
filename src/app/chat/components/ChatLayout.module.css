@@ -1278,6 +1278,103 @@
   padding: 0;
   background: none;
 }
+
+/* ── Fenced code block — header bar (language + Copy) over a seamless pre ── */
+.codeBlock {
+  margin: 0.7em 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-sunken, rgba(0, 0, 0, 0.04));
+}
+.codeBlockHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px 5px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-tint, rgba(0, 0, 0, 0.03));
+}
+.codeLang {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.codeCopyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-mute);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.codeCopyBtn:hover {
+  background: var(--bg-elev);
+  color: var(--ink);
+}
+/* The wrapper owns the chrome; the inner <pre> drops its own frame to blend. */
+.codeBlock :global(pre) {
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+}
+
+/* Syntax tokens — theme-aware via Lakshya tokens (flip automatically in dark
+   mode). A restrained, editorial palette rather than a loud IDE theme. */
+.codeBlock :global(.hljs-comment),
+.codeBlock :global(.hljs-quote) {
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.codeBlock :global(.hljs-keyword),
+.codeBlock :global(.hljs-selector-tag),
+.codeBlock :global(.hljs-literal),
+.codeBlock :global(.hljs-section),
+.codeBlock :global(.hljs-built_in),
+.codeBlock :global(.hljs-type),
+.codeBlock :global(.hljs-meta) {
+  color: var(--accent);
+  font-weight: 600;
+}
+.codeBlock :global(.hljs-string),
+.codeBlock :global(.hljs-regexp),
+.codeBlock :global(.hljs-attr),
+.codeBlock :global(.hljs-addition) {
+  color: var(--pos);
+}
+.codeBlock :global(.hljs-number),
+.codeBlock :global(.hljs-symbol),
+.codeBlock :global(.hljs-bullet),
+.codeBlock :global(.hljs-deletion) {
+  color: var(--warn);
+}
+.codeBlock :global(.hljs-title),
+.codeBlock :global(.hljs-name),
+.codeBlock :global(.hljs-tag) {
+  color: var(--accent-deep);
+}
+.codeBlock :global(.hljs-variable),
+.codeBlock :global(.hljs-template-variable),
+.codeBlock :global(.hljs-property) {
+  color: var(--ink);
+}
+.codeBlock :global(.hljs-emphasis) {
+  font-style: italic;
+}
+.codeBlock :global(.hljs-strong) {
+  font-weight: 700;
+}
 .answerProse :global(a) {
   color: var(--accent, #8b6f3f);
   text-decoration: underline;
@@ -1298,6 +1395,38 @@
 .answerProse :global(th) {
   background: var(--bg-tint, rgba(0, 0, 0, 0.03));
   font-weight: 600;
+}
+
+/* Continue generating — shown when the answer was cut off at the token cap. */
+.continueRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.continueBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+.continueBtn:hover {
+  background: var(--accent);
+  color: var(--text-on-accent, #fff);
+}
+.continueHint {
+  font-size: 12px;
+  color: var(--ink-mute);
 }
 
 /* Suggested follow-up chips (under the latest answer) — themed light/dark. */
@@ -1325,6 +1454,27 @@
   background: var(--accent-soft);
   color: var(--ink);
 }
+
+/* Chat → BMC handoff card. */
+.bmcHandoff {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  color: var(--ink-soft);
+  text-decoration: none;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.bmcHandoff:hover { border-color: var(--accent); background: var(--accent-soft); }
+.bmcHandoff svg { color: var(--accent); flex-shrink: 0; }
+.bmcHandoffText { flex: 1; font-size: 13px; }
+.bmcHandoffText strong { color: var(--ink); font-weight: 600; }
+.bmcHandoffArrow { font-size: 12.5px; font-weight: 600; color: var(--accent); white-space: nowrap; }
 .answerProse :global(blockquote) {
   margin: 0.6em 0;
   padding-left: 12px;
@@ -2377,6 +2527,148 @@
   color: var(--accent-deep);
 }
 
+/* ── Per-answer feedback (👍/👎) ─────────────────────────────────────────── */
+.feedbackGroup {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.feedbackBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  color: var(--ink-mute);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+.feedbackBtn:hover {
+  background: var(--bg-tint);
+  color: var(--ink);
+}
+.feedbackBtnUpActive,
+.feedbackBtnUpActive:hover {
+  color: var(--pos);
+  background: var(--pos-soft);
+  border-color: var(--pos);
+}
+.feedbackBtnDownActive,
+.feedbackBtnDownActive:hover {
+  color: var(--neg);
+  background: var(--neg-soft);
+  border-color: var(--neg);
+}
+
+/* Reason picker — opens above the thumbs, right-aligned to avoid overflow. */
+.feedbackPicker {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  width: 280px;
+  max-width: min(280px, 80vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+.feedbackPickerTitle {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.feedbackChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.feedbackChip {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-mute);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+.feedbackChip:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.feedbackChipActive,
+.feedbackChipActive:hover {
+  color: var(--text-on-accent, #fff);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.feedbackComment {
+  width: 100%;
+  resize: vertical;
+  min-height: 56px;
+  padding: 8px 10px;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 6px);
+  transition: border-color var(--transition-fast);
+}
+.feedbackComment:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.feedbackActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.feedbackCancel {
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-mute);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.feedbackCancel:hover {
+  color: var(--ink);
+  border-color: var(--line-soft);
+}
+.feedbackSubmit {
+  padding: 5px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-on-accent, #fff);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.feedbackSubmit:hover {
+  background: var(--accent-deep);
+}
+.feedbackSubmit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* Expanded source list — full width below the row */
 .sourcesList {
   display: flex;
@@ -2474,9 +2766,32 @@
 
 /* ── Composer ── */
 .composerWrap {
+  position: relative;
   flex-shrink: 0;
   border-top: 1px solid var(--line);
   background: var(--bg);
+}
+/* Floating "jump to latest" — pinned just above the composer, right-aligned. */
+.scrollToLatest {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: clamp(16px, 4vw, 32px);
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--ink);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow-md, 0 6px 18px rgba(0, 0, 0, 0.12));
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.scrollToLatest:hover {
+  background: var(--bg-tint);
+  border-color: var(--line-soft);
 }
 .composerInner {
   width: 100%;

@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { useAuthUser } from "@/lib/auth/useAuthUser";
 import { useMe } from "@/lib/api/me";
 import { useRecentConversations } from "@/lib/api/conversations";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { cn } from "@/lib/utils";
 import { useBacktests, useStrategies } from "@/lib/api/portfolio";
 import { useChatActions } from "@/components/ChatProvider";
 import ConversationActionsMenu from "@/components/ConversationActionsMenu";
@@ -21,17 +23,15 @@ import styles from "./AccountView.module.css";
 export default function AccountView() {
   const auth = useAuthUser();
   const me = useMe();
-  const conversations = useRecentConversations();
+  const [search, setSearch] = React.useState("");
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const [archived, setArchived] = React.useState(false);
+  const [limit, setLimit] = React.useState(20);
+  const conversations = useRecentConversations(debouncedSearch, { archived, limit });
   const strategies = useStrategies();
   const backtests = useBacktests();
   const router = useRouter();
   const { sendRecent } = useChatActions();
-
-  const [search, setSearch] = React.useState("");
-
-  const filteredConversations = conversations.items.filter((c) =>
-    c.label.toLowerCase().includes(search.trim().toLowerCase()),
-  );
 
   // Guest (auth on, not signed in) → invite to sign in.
   if (auth.authEnabled && !auth.isSignedIn) {
@@ -75,33 +75,61 @@ export default function AccountView() {
           <h2 className={styles.sectionTitle}>Conversations</h2>
           <Link className={styles.seeAll} href="/chat">Open chat →</Link>
         </div>
-        {conversations.items.length > 0 && (
+        <div className={styles.convControls}>
           <input
             className={styles.search}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search conversations…"
           />
-        )}
+          <div className={styles.convTabs}>
+            <button
+              className={cn(styles.convTab, !archived && styles.convTabActive)}
+              onClick={() => setArchived(false)}
+            >
+              All
+            </button>
+            <button
+              className={cn(styles.convTab, archived && styles.convTabActive)}
+              onClick={() => setArchived(true)}
+            >
+              Archived
+            </button>
+          </div>
+        </div>
         {conversations.loading && <div className={styles.muted}>Loading…</div>}
         {!conversations.loading && conversations.items.length === 0 && (
-          <div className={styles.muted}>No conversations yet — start one in Research Chat.</div>
-        )}
-        {!conversations.loading && conversations.items.length > 0 && filteredConversations.length === 0 && (
-          <div className={styles.muted}>No conversations match “{search}”.</div>
+          <div className={styles.muted}>
+            {debouncedSearch.trim()
+              ? `No conversations match “${search}”.`
+              : archived
+                ? "No archived conversations."
+                : "No conversations yet — start one in Research Chat."}
+          </div>
         )}
         <div className={styles.list}>
-          {filteredConversations.slice(0, 15).map((c) => (
+          {conversations.items.map((c) => (
             <div key={c.id} className={styles.row}>
               <button className={styles.rowMainBtn} onClick={() => sendRecent(c.id)}>
                 <span className={styles.rowMain}>{c.label}</span>
               </button>
               {!conversations.isMock && (
-                <ConversationActionsMenu id={c.id} label={c.label} buttonClassName={styles.rowMenuBtn} />
+                <ConversationActionsMenu
+                  id={c.id}
+                  label={c.label}
+                  pinned={c.pinned}
+                  archived={archived}
+                  buttonClassName={styles.rowMenuBtn}
+                />
               )}
             </div>
           ))}
         </div>
+        {!conversations.loading && conversations.items.length >= limit && (
+          <button className={styles.loadMore} onClick={() => setLimit((l) => l + 20)}>
+            Load more
+          </button>
+        )}
       </section>
 
       {/* ── Saved strategies ── */}

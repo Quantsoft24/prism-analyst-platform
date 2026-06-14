@@ -1,16 +1,20 @@
-/* BMCBlock — one Osterwalder block card.
- * Uses the shared design tokens from globals.css (var(--bg), var(--ink), ...)
- * so it stays visually consistent with the legacy CSS-Module components. */
+/* BMCBlock — one Osterwalder block card. Token-only (var(--*)) so it themes for
+ * light + dark automatically via globals.css. No hardcoded colors. */
 
 .block {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 160px;
-  padding: 16px;
+  min-height: 150px;
+  padding: 14px 15px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--bg-elev);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.block:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  box-shadow: var(--shadow-sm);
 }
 
 .header {
@@ -26,8 +30,8 @@
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-mute);
+  letter-spacing: 0.05em;
+  color: var(--accent-deep);
 }
 
 .confidence {
@@ -35,15 +39,15 @@
   padding: 1px 7px;
   border-radius: var(--radius-sm);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
 }
 .confPos { background: var(--pos-soft); color: var(--pos); }
 .confWarn { background: var(--warn-soft); color: var(--warn); }
 .confNeg { background: var(--neg-soft); color: var(--neg); }
+.confMissing { background: var(--bg-sunken); color: var(--ink-faint); font-family: var(--font-body); }
 
-.body {
-  flex: 1;
-}
+.body { flex: 1; min-width: 0; }
 
 .empty {
   font-size: 12px;
@@ -55,57 +59,92 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.55;
   color: var(--ink-soft);
   list-style: none;
 }
-
-.bullet {
-  display: flex;
-  min-width: 0;
-  gap: 8px;
-}
-
+.bullet { display: flex; min-width: 0; gap: 8px; }
 .bulletDot {
   flex-shrink: 0;
   width: 4px;
   height: 4px;
-  margin-top: 7px;
+  margin-top: 8px;
   border-radius: 9999px;
   background: color-mix(in srgb, var(--accent) 60%, transparent);
 }
+.bulletText { min-width: 0; overflow-wrap: break-word; }
 
-.bulletText {
-  min-width: 0;
-  overflow-wrap: break-word;
-}
-
+/* Citation markers — clickable, open the source PDF at the page (like chat). */
+.citeGroup { display: inline; white-space: nowrap; }
 .cite {
-  margin: 0 2px;
-  vertical-align: super;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--accent);
-  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  margin: 0 1px;
+  padding: 0 3px;
+  border: none;
   border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: super;
 }
-.cite:hover { text-decoration: underline; }
-.cite:focus-visible { outline: 1px solid var(--accent); }
+.citeLink { cursor: pointer; box-shadow: inset 0 -1px 0 var(--accent); }
+.citeLink:hover { background: var(--accent); color: var(--text-on-accent, #fff); box-shadow: none; }
+.citeLink:focus-visible { outline: 1.5px solid var(--accent); outline-offset: 1px; }
+.cite:disabled { cursor: default; opacity: 0.7; }
 
-.tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+/* Key takeaways — the cross-bullet synthesis layer, visually distinct. */
+.insights {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-soft);
+}
+.insightsLabel {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+  margin-bottom: 5px;
+}
+.insightsList { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.insight {
+  position: relative;
+  padding-left: 12px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-mute);
+}
+.insight::before {
+  content: "▸";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-size: 9px;
+  top: 1px;
+}
+
+.footer {
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid var(--line-soft);
 }
-
-.tag {
-  padding: 1px 7px;
+.drillBtn {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--bg-tint);
-  color: var(--ink-soft);
-  font-size: 10px;
+  color: var(--ink-mute);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
+.drillBtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }

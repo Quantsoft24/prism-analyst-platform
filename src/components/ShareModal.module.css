@@ -1,0 +1,143 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: var(--scrim, rgba(0, 0, 0, 0.4));
+  animation: shareFade 0.15s ease;
+}
+.modal {
+  position: fixed;
+  z-index: 91;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(480px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 14px);
+  box-shadow: var(--shadow-lg, 0 20px 60px rgba(0, 0, 0, 0.25));
+  animation: shareFade 0.15s ease;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.close {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--ink-mute);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.close:hover {
+  background: var(--bg-tint);
+  color: var(--ink);
+}
+.caveat {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-mute);
+}
+.state,
+.stateError {
+  padding: 10px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+  background: var(--bg-tint);
+  color: var(--ink-mute);
+}
+.stateError {
+  color: var(--neg);
+  background: var(--neg-soft);
+}
+.linkRow {
+  display: flex;
+  gap: 8px;
+}
+.linkInput {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.linkInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.copyBtn {
+  flex-shrink: 0;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-on-accent, #fff);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.copyBtn:hover {
+  background: var(--accent-deep);
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.revokeBtn {
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--neg);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.revokeBtn:hover {
+  background: var(--neg-soft);
+  border-color: var(--neg);
+}
+.revokeBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@keyframes shareFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
