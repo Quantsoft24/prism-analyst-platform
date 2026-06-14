@@ -52,6 +52,38 @@ export interface PriceSeries {
   points: PricePoint[];
 }
 
+// Market overview (landing) — indices strip + top movers.
+export interface IndexLatest {
+  index_id: number;
+  index_name: string | null;
+  trade_date: string | null;
+  level: number | null;
+  change_pct: number | null;
+  spark: number[];
+}
+
+export type MoverKind = "gainers" | "losers" | "most_active";
+
+export interface MoverRow {
+  security_id: number;
+  security_name: string | null;
+  symbol: string | null;
+  exchange: string | null;
+  sector: string | null;
+  close: number | null;
+  prev_close: number | null;
+  change_pct: number | null;
+  trade_value: number | null;
+  market_cap: number | null;
+}
+
+export interface MoversResponse {
+  kind: MoverKind;
+  universe: string;
+  trade_date: string | null;
+  movers: MoverRow[];
+}
+
 // Annual financials (Balance Sheet)
 export type FinancialBasis = "standalone" | "consolidated";
 
@@ -252,6 +284,24 @@ export const stocksApi = {
   securities(signal?: AbortSignal): Promise<Security[]> {
     return apiClient.get<Security[]>(`${base}/securities`, { signal });
   },
+  /** Latest level + day move + sparkline for each index (landing strip). */
+  indicesLatest(sparkDays = 30, signal?: AbortSignal): Promise<IndexLatest[]> {
+    return apiClient.get<IndexLatest[]>(`${base}/indices/latest`, {
+      query: { spark_days: sparkDays },
+      signal,
+    });
+  },
+  /** Top gainers / losers / most-active over the Nifty 200 universe. */
+  movers(kind: MoverKind, limit = 10, signal?: AbortSignal): Promise<MoversResponse> {
+    return apiClient.get<MoversResponse>(`${base}/movers`, {
+      query: { kind, limit },
+      signal,
+    });
+  },
+  /** Largest companies by market cap (Nifty 200) — BMC "suggested to build". */
+  topCompanies(limit = 12, signal?: AbortSignal): Promise<MoverRow[]> {
+    return apiClient.get<MoverRow[]>(`${base}/top-companies`, { query: { limit }, signal });
+  },
   prices(securityId: number, range: StockRange, signal?: AbortSignal): Promise<PriceSeries> {
     return apiClient.get<PriceSeries>(`${base}/${securityId}/prices`, {
       query: { range },
@@ -308,6 +358,9 @@ export const stocksApi = {
 export const stocksKeys = {
   all: ["stocks"] as const,
   securities: () => ["stocks", "securities"] as const,
+  indices: () => ["stocks", "indices"] as const,
+  movers: (kind: MoverKind, limit: number) => ["stocks", "movers", kind, limit] as const,
+  topCompanies: (limit: number) => ["stocks", "top-companies", limit] as const,
   prices: (securityId: number, range: StockRange) =>
     ["stocks", "prices", securityId, range] as const,
   balanceSheet: (securityId: number, basis: FinancialBasis) =>
@@ -337,6 +390,48 @@ export function useSecurities(
     queryFn: ({ signal }) => stocksApi.securities(signal),
     staleTime: DAY_MS,
     gcTime: DAY_MS,
+    ...options,
+  });
+}
+
+/** Index levels + day move + sparkline for the landing strip (EOD data). */
+export function useIndicesLatest(
+  options?: Omit<UseQueryOptions<IndexLatest[], Error>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: stocksKeys.indices(),
+    queryFn: ({ signal }) => stocksApi.indicesLatest(30, signal),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: true,
+    ...options,
+  });
+}
+
+/** Top gainers / losers / most-active (Nifty 200 universe; EOD data, cached). */
+export function useMovers(
+  kind: MoverKind,
+  limit = 10,
+  options?: Omit<UseQueryOptions<MoversResponse, Error>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: stocksKeys.movers(kind, limit),
+    queryFn: ({ signal }) => stocksApi.movers(kind, limit, signal),
+    staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: true,
+    ...options,
+  });
+}
+
+/** Largest companies by market cap (Nifty 200; EOD data, cached server-side). */
+export function useTopCompanies(
+  limit = 12,
+  options?: Omit<UseQueryOptions<MoverRow[], Error>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: stocksKeys.topCompanies(limit),
+    queryFn: ({ signal }) => stocksApi.topCompanies(limit, signal),
+    staleTime: 30 * 60 * 1000,
     ...options,
   });
 }
@@ -580,4 +675,25 @@ export function commonPct(value: number | null | undefined, base: number | null 
 export function formatPct(p: number | null): string {
   if (p == null || Number.isNaN(p)) return "—";
   return `${p >= 0 ? "+" : ""}${p.toFixed(1)}%`;
+}
+
+/**
+ * SVG path `d` for an inline sparkline over `values`, scaled to a `w`×`h` box
+ * (min→bottom, max→top). Returns "" when there are fewer than two points.
+ * Used by the market-overview indices strip + featured preview.
+ */
+export function sparklinePath(values: number[], w: number, h: number): string {
+  const pts = values.filter((v): v is number => typeof v === "number" && !Number.isNaN(v));
+  if (pts.length < 2) return "";
+  const min = Math.min(...pts);
+  const max = Math.max(...pts);
+  const span = max - min || 1;
+  const step = w / (pts.length - 1);
+  return pts
+    .map((v, i) => {
+      const x = i * step;
+      const y = h - ((v - min) / span) * h;
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(" ");
 }

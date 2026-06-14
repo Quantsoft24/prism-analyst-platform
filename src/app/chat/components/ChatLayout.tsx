@@ -1,18 +1,30 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 
 import { cn } from "@/lib/utils";
 import { type IntentConfig, type IntentType } from "@/lib/mockData";
 import { useAuthUser } from "@/lib/auth/useAuthUser";
 import QuotaNotice from "@/components/QuotaNotice";
+import ShareModal from "@/components/ShareModal";
 import { useToast } from "@/components/Toast";
 import ClarificationCard from "./ClarificationCard";
 import TaskChecklist from "./TaskChecklist";
 import FilingPdfViewer, { type FilingPdfSource } from "./FilingPdfViewer";
 import { toolLabel } from "./toolLabels";
+import {
+  downloadTextFile,
+  messagesToMarkdown,
+  slugifyFilename,
+} from "@/lib/chat/exportMarkdown";
+import {
+  useSubmitFeedback,
+  type MessageFeedback,
+} from "@/lib/api/conversations";
 import type { Citation } from "@/lib/api/chat";
 import type {
   AgentThought,
@@ -166,40 +178,43 @@ function findFilingCitation(
   );
 }
 
-/** Inline `[Company | p.N]` citation in the answer prose. Renders as the SAME
- *  compact numbered badge + hover popover as a `[n]` citation — numbered by the
- *  source's position in the Sources list, so the inline badge, the popover, and
- *  the Sources row all line up. (Replaces the old verbose "[Company | p.N]"
- *  chip.) Falls back to a small muted page marker only when no PDF resolves. */
+/** Inline `[Company | p.N]` citation in the answer prose — including COMBINED
+ *  markers like `[Company | p.44, p.45, p.14]` (the composer sometimes groups
+ *  pages). Renders a SINGLE clean numbered badge + hover popover for the fact
+ *  (the first page that resolves to a source), exactly like stock-chat's `[n]`
+ *  — NOT a noisy string of per-page badges + `p.N` text. The full per-fact
+ *  evidence (every page) lives on the /bmc canvas. */
 function FilingCiteMarker({
   company,
-  page,
+  pages,
   citations,
 }: {
   company: string;
-  page: number;
+  pages: number[];
   citations: Citation[];
 }) {
-  const cite = findFilingCitation(citations, company, page);
-  if (cite) {
-    return <CitationMarker index={citations.indexOf(cite) + 1} citation={cite} />;
+  for (const page of pages) {
+    const cite = findFilingCitation(citations, company, page);
+    if (cite) {
+      return <CitationMarker index={citations.indexOf(cite) + 1} citation={cite} />;
+    }
   }
-  // No resolvable PDF for this page — a compact, muted page marker rather than
-  // the raw "[Company | p.N]" text.
+  // None of the pages resolved to a source — one compact muted marker.
   return (
-    <sup className={styles.citeInlineText} title={`${company} · p.${page}`}>
-      p.{page}
+    <sup className={styles.citeInlineText} title={`${company} · pp. ${pages.join(", ")}`}>
+      p.{pages[0]}
     </sup>
   );
 }
 
 /** Split a text run on citation markers — numeric `[n]` and inline
- *  `[Company | p.N]` — and render each clickable. */
+ *  `[Company | p.N]` (incl. multi-page `[Company | p.5, p.10]`) — render each
+ *  clickable. */
 function renderTextWithCitations(
   text: string,
   citations: Citation[],
 ): React.ReactNode[] {
-  const parts = text.split(/(\[\d+\]|\[[^\]]*\|\s*pp?\.?\s*\d+\])/g);
+  const parts = text.split(/(\[\d+\]|\[[^\]|]+\|[^\]]*?\d\])/g);
   return parts.map((part, i) => {
     const numMatch = part.match(/^\[(\d+)\]$/);
     if (numMatch) {
@@ -208,16 +223,19 @@ function renderTextWithCitations(
         <CitationMarker key={i} index={n} citation={citations[n - 1]} />
       );
     }
-    const fileMatch = part.match(/^\[([^\]]*?)\|\s*pp?\.?\s*(\d+)\]$/i);
+    const fileMatch = part.match(/^\[([^\]|]+)\|([^\]]*\d)\]$/);
     if (fileMatch) {
-      return (
-        <FilingCiteMarker
-          key={i}
-          company={fileMatch[1].trim()}
-          page={Number(fileMatch[2])}
-          citations={citations}
-        />
-      );
+      const pages = (fileMatch[2].match(/\d+/g) ?? []).map(Number);
+      if (pages.length > 0) {
+        return (
+          <FilingCiteMarker
+            key={i}
+            company={fileMatch[1].trim()}
+            pages={pages}
+            citations={citations}
+          />
+        );
+      }
     }
     return <span key={i}>{part}</span>;
   });
@@ -245,6 +263,82 @@ function SourceOpenLink({ citation }: { citation: Citation }) {
     <a href={citation.url} target="_blank" rel="noreferrer noopener" className={styles.sourceLink}>
       Open ↗
     </a>
+  );
+}
+
+/* ── Fenced code block — syntax-highlighted (rehype-highlight) with a header
+ *  bar carrying the language label + a per-block Copy button (GitHub pattern).
+ *  Defined at module scope so its identity is stable across re-renders (a new
+ *  component type each render would remount + drop the `copied` state while
+ *  streaming). ───────────────────────────────────────────────────────────── */
+
+/** Recursively gather the plain text under a hast node (the raw code to copy). */
+function hastNodeText(node: unknown): string {
+  const n = node as { type?: string; value?: string; children?: unknown[] } | null;
+  if (!n) return "";
+  if (n.type === "text") return n.value ?? "";
+  if (Array.isArray(n.children)) return n.children.map(hastNodeText).join("");
+  return "";
+}
+
+/** Pull the fenced language off the inner `<code class="language-x">` node. */
+function hastCodeLang(node: unknown): string | null {
+  const n = node as
+    | { children?: Array<{ tagName?: string; properties?: { className?: unknown } }> }
+    | null;
+  const code = n?.children?.find((c) => c.tagName === "code");
+  const cls = code?.properties?.className;
+  const list = Array.isArray(cls) ? cls : [];
+  const lang = list.find((c) => typeof c === "string" && c.startsWith("language-")) as
+    | string
+    | undefined;
+  return lang ? lang.replace("language-", "") : null;
+}
+
+function CodeBlock({ node, children }: { node?: unknown; children?: React.ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const lang = hastCodeLang(node);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(hastNodeText(node));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked (insecure context / denied) — silently no-op */
+    }
+  };
+
+  return (
+    <div className={styles.codeBlock}>
+      <div className={styles.codeBlockHeader}>
+        <span className={styles.codeLang}>{lang ?? "code"}</span>
+        <button
+          type="button"
+          className={styles.codeCopyBtn}
+          onClick={copy}
+          aria-label="Copy code"
+        >
+          {copied ? (
+            <>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Copied
+            </>
+          ) : (
+            <>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              Copy
+            </>
+          )}
+        </button>
+      </div>
+      <pre>{children}</pre>
+    </div>
   );
 }
 
@@ -280,6 +374,8 @@ function makeMarkdownComponents(citations: Citation[]) {
         {children}
       </a>
     ),
+    // Fenced code → highlighted block with a language label + Copy button.
+    pre: CodeBlock,
   };
 }
 
@@ -306,7 +402,11 @@ function AnswerBlock({
   return (
     <div className={styles.answerBlock}>
       <div className={cn(styles.msgBodyText, styles.answerProse)}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
+          components={components}
+        >
           {text}
         </ReactMarkdown>
         {shimmer && <span className={styles.streamCursor} />}
@@ -582,6 +682,176 @@ function ThinkingBlock({ thoughts, active }: { thoughts: AgentThought[]; active:
   );
 }
 
+/* ── Per-answer feedback (👍/👎) ─────────────────────────────────────────────
+ *  Beside Copy in the answer footer. 👍 records +1; 👎 records -1 immediately
+ *  and opens an optional reason picker (chips + free text). Re-rating upserts on
+ *  the backend (keyed by agent_run_id). The pressed state restores on replay. */
+
+const FEEDBACK_REASONS = [
+  "Inaccurate",
+  "Incomplete",
+  "Wrong source",
+  "Not helpful",
+  "Other",
+] as const;
+
+function FeedbackControls({
+  agentRunId,
+  initial,
+}: {
+  agentRunId: string | null;
+  initial: MessageFeedback | null;
+}) {
+  const { toast } = useToast();
+  const submit = useSubmitFeedback();
+  const [rating, setRating] = useState<1 | -1 | null>(initial?.rating ?? null);
+  const [reasons, setReasons] = useState<string[]>(initial?.reasons ?? []);
+  const [comment, setComment] = useState(initial?.comment ?? "");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Close the reason picker on an outside click (mirrors the menu pattern).
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [pickerOpen]);
+
+  // No run id (a turn that never carried one) or a mock/demo run (no real row
+  // to rate) → no feedback target.
+  if (!agentRunId || agentRunId.startsWith("mock-")) return null;
+
+  const persist = (r: 1 | -1, rs: string[], c: string, onOk?: () => void) => {
+    submit.mutate(
+      { agentRunId, rating: r, reasons: rs, comment: c.trim() || null },
+      {
+        onSuccess: () => onOk?.(),
+        onError: () => toast("Couldn't save your feedback", "error"),
+      },
+    );
+  };
+
+  const onThumbUp = () => {
+    setPickerOpen(false);
+    if (rating === 1) return; // already 👍 — no-op (no un-rate endpoint)
+    setRating(1);
+    setReasons([]);
+    setComment("");
+    persist(1, [], "", () => toast("Thanks for the feedback", "success"));
+  };
+
+  const onThumbDown = () => {
+    if (rating !== -1) {
+      // Record the down-vote immediately; the reason detail is optional.
+      setRating(-1);
+      persist(-1, reasons, comment);
+    }
+    setPickerOpen((o) => !o);
+  };
+
+  const toggleReason = (reason: string) =>
+    setReasons((rs) =>
+      rs.includes(reason) ? rs.filter((x) => x !== reason) : [...rs, reason],
+    );
+
+  const submitDetail = () => {
+    persist(-1, reasons, comment, () => {
+      toast("Thanks — we'll use this to improve", "success");
+    });
+    setPickerOpen(false);
+  };
+
+  return (
+    <div className={styles.feedbackGroup} ref={wrapRef}>
+      <button
+        type="button"
+        className={cn(
+          styles.feedbackBtn,
+          rating === 1 && styles.feedbackBtnUpActive,
+        )}
+        onClick={onThumbUp}
+        aria-pressed={rating === 1}
+        aria-label="Good answer"
+        title="Good answer"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M7 10v12" />
+          <path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className={cn(
+          styles.feedbackBtn,
+          rating === -1 && styles.feedbackBtnDownActive,
+        )}
+        onClick={onThumbDown}
+        aria-pressed={rating === -1}
+        aria-expanded={pickerOpen}
+        aria-label="Bad answer"
+        title="Bad answer"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M17 14V2" />
+          <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z" />
+        </svg>
+      </button>
+
+      {pickerOpen && (
+        <div className={styles.feedbackPicker} role="dialog" aria-label="What went wrong?">
+          <div className={styles.feedbackPickerTitle}>What went wrong?</div>
+          <div className={styles.feedbackChips}>
+            {FEEDBACK_REASONS.map((reason) => (
+              <button
+                key={reason}
+                type="button"
+                className={cn(
+                  styles.feedbackChip,
+                  reasons.includes(reason) && styles.feedbackChipActive,
+                )}
+                onClick={() => toggleReason(reason)}
+                aria-pressed={reasons.includes(reason)}
+              >
+                {reason}
+              </button>
+            ))}
+          </div>
+          <textarea
+            className={styles.feedbackComment}
+            placeholder="Add details (optional)"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            maxLength={2000}
+            rows={3}
+          />
+          <div className={styles.feedbackActions}>
+            <button
+              type="button"
+              className={styles.feedbackCancel}
+              onClick={() => setPickerOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={styles.feedbackSubmit}
+              onClick={submitDetail}
+              disabled={submit.isPending}
+            >
+              Submit
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Answer footer — sources toggle + open-report on one row; the expanded
  *  source list drops full-width below (no horizontal cramming). ─────────── */
 
@@ -591,12 +861,16 @@ function AnswerFooter({
   showWorkspace,
   onOpenReport,
   text,
+  agentRunId,
+  feedback,
 }: {
   citations: Citation[];
   tools: ToolCallState[];
   showWorkspace: boolean;
   onOpenReport: () => void;
   text: string;
+  agentRunId: string | null;
+  feedback: MessageFeedback | null;
 }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -665,6 +939,7 @@ function AnswerFooter({
           </svg>
           Copy
         </button>
+        <FeedbackControls agentRunId={agentRunId} initial={feedback} />
       </div>
       {open && total > 0 && (
         <div className={styles.sourcesList}>
@@ -1359,6 +1634,7 @@ export default function ChatLayout({
   const userInitial = (authUser.initials || "Y").charAt(0);
   const [followUpText, setFollowUpText] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   // The filing PDF a citation deep-linked into (opens in the workspace drawer).
   const [pdfSource, setPdfSource] = useState<FilingPdfSource | null>(null);
   const openFilingPdf = React.useCallback((source: FilingPdfSource) => {
@@ -1370,12 +1646,34 @@ export default function ChatLayout({
     setPdfSource(null);
   }, []);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   // call_id → expanded? Tool steps start collapsed; click to inspect I/O.
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
+  // Is the thread scrolled to (near) the bottom? Drives both the auto-scroll
+  // gate and the floating "jump to latest" button.
+  const [atBottom, setAtBottom] = useState(true);
 
-  useEffect(() => {
+  const onThreadScroll = React.useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // 80px slack so "almost at the bottom" still counts (avoids a flickering
+    // button on sub-pixel/rounding gaps during streaming).
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    setAtBottom(near);
+  }, []);
+
+  const scrollToBottom = React.useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, phase]);
+  }, []);
+
+  // Auto-scroll on new content — but ONLY when the user is already at the
+  // bottom. If they've scrolled up to read scrollback, don't yank them down
+  // mid-stream; the floating button lets them jump back when ready.
+  useEffect(() => {
+    if (atBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, phase, atBottom]);
 
   const toggleTool = (call_id: string) => {
     setExpandedTools((prev) => {
@@ -1452,6 +1750,45 @@ export default function ChatLayout({
                 Stop
               </button>
             )}
+            {!isRunning && messages.some((m) => m.role === "assistant") && (
+              <button
+                type="button"
+                className={styles.reportBtn}
+                onClick={() => {
+                  const exportTitle =
+                    messages.find((m) => m.role === "user")?.text ?? intentConfig.title;
+                  downloadTextFile(
+                    `${slugifyFilename(exportTitle)}.md`,
+                    messagesToMarkdown(exportTitle, messages),
+                  );
+                }}
+                title="Export this conversation as Markdown"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Export
+              </button>
+            )}
+            {!isRunning && runMeta.session_id && messages.some((m) => m.role === "assistant") && (
+              <button
+                type="button"
+                className={styles.reportBtn}
+                onClick={() => setShareOpen(true)}
+                title="Share a read-only link to this conversation"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                </svg>
+                Share
+              </button>
+            )}
             {showWorkspace && (
               <button
                 type="button"
@@ -1471,7 +1808,7 @@ export default function ChatLayout({
       </div>
 
       {/* ── Conversation (single centered column) ── */}
-      <div className={styles.scroll}>
+      <div className={styles.scroll} ref={scrollRef} onScroll={onThreadScroll}>
         <div className={styles.thread}>
           {messages.map((msg, mi) => {
             if (msg.role === "user") {
@@ -1529,8 +1866,32 @@ export default function ChatLayout({
                         showWorkspace={showWorkspace}
                         onOpenReport={() => setDrawerOpen(true)}
                         text={msg.streamedText || msg.text}
+                        agentRunId={msg.agentRunId ?? null}
+                        feedback={msg.feedback ?? null}
                       />
                     )}
+                    {/* Continue generating — the model hit its output cap and the
+                        answer is cut off. Only on the latest answer, idle. */}
+                    {!streaming &&
+                      !isRunning &&
+                      mi === messages.length - 1 &&
+                      msg.truncated && (
+                        <div className={styles.continueRow}>
+                          <button
+                            type="button"
+                            className={styles.continueBtn}
+                            onClick={() => onFollowUp("Continue from where you left off.")}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polygon points="5 3 19 12 5 21 5 3" />
+                            </svg>
+                            Continue generating
+                          </button>
+                          <span className={styles.continueHint}>
+                            The previous answer was cut off at the length limit.
+                          </span>
+                        </div>
+                      )}
                     {/* Suggested follow-ups — only on the latest answer, idle. */}
                     {!streaming &&
                       !isRunning &&
@@ -1549,6 +1910,40 @@ export default function ChatLayout({
                           ))}
                         </div>
                       )}
+
+                    {/* Chat → BMC handoff: if a bmc tool ran this turn, offer to
+                        open the full canvas (the 9-block grid needs more room than
+                        the chat pane). Ticker comes from the tool-call args. */}
+                    {!streaming &&
+                      (() => {
+                        const bmcTools = tools.filter(
+                          (t) => t.tool === "bmc_get" || t.tool === "bmc_generate",
+                        );
+                        const t = bmcTools.find((x) => x.args?.ticker)?.args?.ticker;
+                        if (!t || typeof t !== "string") return null;
+                        // A canvas exists when a bmc tool returned one (runner
+                        // summary "N-block canvas"); a cold-miss bmc_get reads
+                        // "no saved canvas yet". The STATE text reflects that, but
+                        // the ACTION is always "Open full canvas" — the card only
+                        // navigates to /bmc; if no canvas is saved the user builds
+                        // it there with the explicit Generate button.
+                        const hasCanvas = bmcTools.some((x) =>
+                          (x.result_summary ?? "").includes("-block canvas"),
+                        );
+                        return (
+                          <Link href={`/bmc?ticker=${encodeURIComponent(t)}`} className={styles.bmcHandoff}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <rect x="3" y="3" width="18" height="18" rx="2" />
+                              <path d="M3 9h18M9 21V9" />
+                            </svg>
+                            <span className={styles.bmcHandoffText}>
+                              <strong>Business Model Canvas</strong>
+                              {hasCanvas ? ` · ready for ${t}` : ` · not saved yet for ${t}`}
+                            </span>
+                            <span className={styles.bmcHandoffArrow}>Open full canvas →</span>
+                          </Link>
+                        );
+                      })()}
                   </>
                 )}
 
@@ -1621,6 +2016,21 @@ export default function ChatLayout({
 
       {/* ── Composer ── */}
       <div className={styles.composerWrap}>
+        {/* Jump to latest — only when scrolled up off the bottom. */}
+        {!atBottom && (
+          <button
+            type="button"
+            className={styles.scrollToLatest}
+            onClick={scrollToBottom}
+            aria-label="Scroll to latest"
+            title="Scroll to latest"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <polyline points="19 12 12 19 5 12" />
+            </svg>
+          </button>
+        )}
         <div className={styles.composerInner}>
           {/* Clarification form — docked right above the input, themed light/dark. */}
           {activeClarification && (
@@ -1703,6 +2113,14 @@ export default function ChatLayout({
         </>
       )}
     </div>
+    {runMeta.session_id && (
+      <ShareModal
+        sessionId={runMeta.session_id}
+        label={intentConfig.title}
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+      />
+    )}
     </FilingPdfContext.Provider>
   );
 }

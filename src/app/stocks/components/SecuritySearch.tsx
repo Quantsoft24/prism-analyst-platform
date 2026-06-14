@@ -10,6 +10,8 @@ import styles from "./stocks.module.css";
 interface SecuritySearchProps {
   onSelect: (security: Security) => void;
   selectedId?: number | null;
+  /** Override the input placeholder (e.g. "Switch company…"). */
+  placeholder?: string;
 }
 
 /**
@@ -18,7 +20,7 @@ interface SecuritySearchProps {
  * Dual-listed names surface as two chips (one per exchange). Chip layout
  * mirrors the global SearchModal's result rows.
  */
-export default function SecuritySearch({ onSelect, selectedId }: SecuritySearchProps) {
+export default function SecuritySearch({ onSelect, selectedId, placeholder }: SecuritySearchProps) {
   const { data, isLoading, isError } = useSecurities();
   const [query, setQuery] = React.useState("");
   const [open, setOpen] = React.useState(false);
@@ -74,7 +76,7 @@ export default function SecuritySearch({ onSelect, selectedId }: SecuritySearchP
       </svg>
       <input
         className={styles.searchInput}
-        placeholder={isLoading ? "Loading securities…" : "Search NSE/BSE companies…"}
+        placeholder={isLoading ? "Loading securities…" : (placeholder ?? "Search NSE/BSE companies…")}
         value={query}
         disabled={isLoading || isError}
         onChange={(e) => {

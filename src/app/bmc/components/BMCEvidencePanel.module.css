@@ -10,6 +10,18 @@
   background: var(--bg-elev);
 }
 
+/* On narrow screens the side panel becomes a full-screen overlay so it doesn't
+   crush the canvas. */
+@media (max-width: 860px) {
+  .panel {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    max-width: none;
+    box-shadow: var(--shadow-lg);
+  }
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -168,6 +180,22 @@
   font-size: 12px;
   color: var(--ink-mute);
 }
+/* Clickable evidence → opens the source PDF at the cited page. */
+.pageLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.pageLink:hover { background: var(--accent-soft); border-color: var(--accent); }
 
 .excerpt {
   max-height: 12rem;

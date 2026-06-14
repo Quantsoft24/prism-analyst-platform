@@ -93,6 +93,24 @@
 }
 .search:focus-visible { outline: none; border-color: var(--accent); }
 
+/* Conversation controls: search + All/Archived tabs */
+.convControls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.convControls .search { margin-bottom: 0; flex: 1 1 200px; }
+.convTabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--bg-sunken); }
+.convTab {
+  padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--ink-mute);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.convTab:hover { color: var(--ink); }
+.convTabActive { background: var(--bg-elev); color: var(--ink); box-shadow: var(--shadow-sm); }
+.loadMore {
+  margin-top: 8px; align-self: flex-start; padding: 7px 14px;
+  border: 1px solid var(--line); border-radius: var(--radius-md);
+  font-size: 12px; font-weight: 600; color: var(--ink-soft);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.loadMore:hover { color: var(--accent); border-color: var(--accent); }
+
 /* ── Guest / empty ── */
 .empty { padding: 48px 16px; text-align: center; }
 .title { font-family: var(--font-display); font-size: 22px; color: var(--ink); }

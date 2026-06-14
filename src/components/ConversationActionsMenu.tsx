@@ -3,8 +3,21 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
-import { useDeleteConversation, useRenameConversation } from "@/lib/api/conversations";
+import {
+  conversationsApi,
+  useArchiveConversation,
+  useDeleteConversation,
+  usePinConversation,
+  useRenameConversation,
+} from "@/lib/api/conversations";
+import {
+  conversationDetailToMarkdown,
+  downloadTextFile,
+  slugifyFilename,
+} from "@/lib/chat/exportMarkdown";
+import { useToast } from "./Toast";
 import { useDialog } from "./Dialog";
+import ShareModal from "./ShareModal";
 import TrashIcon from "./TrashIcon";
 
 import styles from "./ConversationActionsMenu.module.css";
@@ -30,6 +43,51 @@ function RenameIcon() {
   );
 }
 
+function PinIcon({ filled }: { filled?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill={filled ? "currentColor" : "none"}
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 17v5" />
+      <path d="M9 10.76V4h6v6.76a2 2 0 0 0 .59 1.42L17 13.5V15H7v-1.5l1.41-1.32A2 2 0 0 0 9 10.76z" />
+    </svg>
+  );
+}
+
+function ArchiveIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="4" rx="1" />
+      <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
+      <path d="M10 12h4" />
+    </svg>
+  );
+}
+
+function ExportIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+    </svg>
+  );
+}
+
 /**
  * Rename / delete actions for a conversation, each gated by a dialog (prompt /
  * danger-confirm) so a stray click never destroys or mangles a conversation.
@@ -39,8 +97,33 @@ function RenameIcon() {
  */
 export function useConversationActions() {
   const dialog = useDialog();
+  const { toast } = useToast();
   const rename = useRenameConversation();
   const del = useDeleteConversation();
+  const pin = usePinConversation();
+  const archive = useArchiveConversation();
+
+  const togglePin = React.useCallback(
+    (id: string, pinned: boolean) => pin.mutate({ sessionId: id, pinned: !pinned }),
+    [pin],
+  );
+  const toggleArchive = React.useCallback(
+    (id: string, archived: boolean) => archive.mutate({ sessionId: id, archived: !archived }),
+    [archive],
+  );
+
+  const exportMarkdown = React.useCallback(
+    async (id: string, label: string) => {
+      try {
+        const detail = await conversationsApi.get(id);
+        const md = conversationDetailToMarkdown(label, detail);
+        downloadTextFile(`${slugifyFilename(label)}.md`, md);
+      } catch {
+        toast("Couldn't export that conversation.", "error");
+      }
+    },
+    [toast],
+  );
 
   const requestRename = React.useCallback(
     async (id: string, label: string) => {
@@ -68,7 +151,7 @@ export function useConversationActions() {
     [dialog, del],
   );
 
-  return { requestRename, requestDelete };
+  return { requestRename, requestDelete, togglePin, toggleArchive, exportMarkdown };
 }
 
 /**
@@ -81,14 +164,20 @@ export function useConversationActions() {
 export default function ConversationActionsMenu({
   id,
   label,
+  pinned = false,
+  archived = false,
   buttonClassName,
 }: {
   id: string;
   label: string;
+  pinned?: boolean;
+  archived?: boolean;
   buttonClassName?: string;
 }) {
-  const { requestRename, requestDelete } = useConversationActions();
+  const { requestRename, requestDelete, togglePin, toggleArchive, exportMarkdown } =
+    useConversationActions();
   const [menu, setMenu] = React.useState<{ top: number; left: number } | null>(null);
+  const [shareOpen, setShareOpen] = React.useState(false);
   const btnRef = React.useRef<HTMLButtonElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
@@ -160,9 +249,25 @@ export default function ConversationActionsMenu({
           role="menu"
           style={{ top: menu.top, left: menu.left }}
         >
+          <button type="button" role="menuitem" className={styles.menuItem} onClick={runAction(() => togglePin(id, pinned))}>
+            <PinIcon filled={pinned} />
+            {pinned ? "Unpin" : "Pin"}
+          </button>
           <button type="button" role="menuitem" className={styles.menuItem} onClick={runAction(() => requestRename(id, label))}>
             <RenameIcon />
             Rename
+          </button>
+          <button type="button" role="menuitem" className={styles.menuItem} onClick={runAction(() => void exportMarkdown(id, label))}>
+            <ExportIcon />
+            Export (.md)
+          </button>
+          <button type="button" role="menuitem" className={styles.menuItem} onClick={runAction(() => setShareOpen(true))}>
+            <ShareIcon />
+            Share link
+          </button>
+          <button type="button" role="menuitem" className={styles.menuItem} onClick={runAction(() => toggleArchive(id, archived))}>
+            <ArchiveIcon />
+            {archived ? "Unarchive" : "Archive"}
           </button>
           <button
             type="button"
@@ -175,6 +280,12 @@ export default function ConversationActionsMenu({
           </button>
         </div>
       )}
+      <ShareModal
+        sessionId={id}
+        label={label}
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+      />
     </>
   );
 }

@@ -20,10 +20,47 @@ and the gotchas we've already hit so we don't hit them again.
 
 ---
 
+## Release-readiness for this deploy (chat features + auth + worker)
+
+Before promoting this release to `production`, confirm:
+
+1. **Backend migrations.** Backend migration head must reach **`0019_chat_share`**.
+   The frontend chat features **pin/archive, 👍/👎 feedback, and share** return
+   **500/404** without migrations `0017_chat_pin_archive`, `0018_message_feedback`,
+   `0019_chat_share`. The backend deploy auto-runs `alembic upgrade head`, so a
+   normal backend deploy applies them — but call it out because these are a
+   **cross-repo dependency** (frontend ships the UI; the backend must ship the
+   schema). Verify after deploy:
+   ```bash
+   ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145 \
+     "docker exec prism-backend alembic current"   # expect 0019_chat_share
+   ```
+   ⚠️ **One-time caution:** a reverted Phase-7 `0019_agent_run_parent` was deleted
+   and the DB cleaned back to `0018` before the new `0019_chat_share` was added.
+   If any database ever saw the old `0019_agent_run_parent`, reconcile the alembic
+   chain (stamp/down to `0018`) before upgrading, or `alembic upgrade head` will
+   fail on the divergent revision.
+
+2. **Worker is up.** The 5th container (`prism-worker`) must be running, or
+   Portfolio-Builder backtests stay `queued` forever (see the troubleshooting
+   note below). It reuses `prism-backend:latest`.
+
+3. **Frontend auth build args.** The prod frontend now builds with auth ON —
+   see [Scenario 3](#scenario-3--change-a-frontend-next_public_-var). Auth is
+   enabled but login is **not forced** (`REQUIRE_AUTH=false` in
+   `src/middleware.ts`); anonymous visitors browse freely.
+
+4. **Public share surface.** `/shared/[token]` is externally reachable and
+   bypasses auth (in middleware `PUBLIC_PREFIXES`) — include it in smoke tests.
+
+---
+
 ## Architecture overview
 
-Four containers on a single EC2 host (`ubuntu@15.207.146.145`), orchestrated
-by `docker-compose.prod.yml` in this repo:
+**Five containers** on a single EC2 host (`ubuntu@15.207.146.145`),
+orchestrated by `docker-compose.prod.yml` in this repo: landing, frontend,
+backend, **worker** (durable Portfolio-Builder backtests — no ports, reuses the
+backend image), and nginx.
 
 ```
                   Internet (443)
@@ -36,20 +73,22 @@ by `docker-compose.prod.yml` in this repo:
         │ thequantsoft   │ prism.          │ api.
         │ .co.in         │ thequantsoft    │ thequantsoft
         │                │ .co.in          │ .co.in
-   ┌────▼────┐      ┌────▼─────┐     ┌─────▼────┐
-   │ landing │      │ frontend │     │ backend  │
-   │ :4000   │      │ :3000    │     │ :8000    │
-   │ Node    │      │ Next.js  │     │ FastAPI  │
-   └─────────┘      └──────────┘     └────┬─────┘
-                                          │
-                            ┌─────────────┼───────────────┐
-                            │             │               │
-                       ┌────▼────┐   ┌────▼────┐   ┌──────▼────┐
-                       │  Neon   │   │ stock-  │   │   bmc     │
-                       │  PG     │   │ chat    │   │ (external)│
-                       │ (PRISM- │   │ (cata-  │   │ :8012     │
-                       │ owned)  │   │ log RO) │   │           │
-                       └─────────┘   └─────────┘   └───────────┘
+   ┌────▼────┐      ┌────▼─────┐     ┌─────▼────┐      ┌──────────┐
+   │ landing │      │ frontend │     │ backend  │      │  worker  │
+   │ :4000   │      │ :3000    │     │ :8000    │      │ (no port)│
+   │ Node    │      │ Next.js  │     │ FastAPI  │      │ backtests│
+   └─────────┘      └──────────┘     └────┬─────┘      └────┬─────┘
+                                          │                 │
+                            ┌─────────────┼─────────┐       │ same image
+                            │             │         │       │ (prism-backend:latest),
+                      ┌─────▼─────┐  ┌─────▼────┐ ┌──▼─────┐ │ entrypoint
+                      │ primary   │  │ invest.  │ │ SEBI   │◄┘ python -m
+                      │ Postgres  │  │ RDS (RO) │ │ PG (RO)│   src.portfolio.worker
+                      │ (PRISM-   │  │ Stock    │ │ Reg.   │
+                      │  owned)   │  │ Dashbd   │ │ Lens   │
+                      └───────────┘  └──────────┘ └────────┘
+   external (teammate's VM): stock-chat :8011 · bmc :8012 ·
+                             prism-financials :8000 · prism-news :8001
 ```
 
 - **Two repos:** `prism-analyst-platform` (UI + landing + nginx + compose) and
@@ -57,8 +96,17 @@ by `docker-compose.prod.yml` in this repo:
 - **The compose file orchestrates both** — backend build context is
   `../prism-analyst-services`. On EC2, both repos are cloned side-by-side
   under `~/PRISM/`.
-- **External services** (`stock-chat`, `bmc`) live on a different VM and are
-  owned by a teammate — we don't deploy them.
+- **The `worker` container** reuses `prism-backend:latest` (no separate build,
+  no ports) and runs `python -m src.portfolio.worker`. It claims and runs
+  Portfolio-Builder backtests; the API only enqueues them. **If the worker is
+  down, submitted backtests stay `queued` forever.** It is restart-safe
+  (reclaims stale RUNNING jobs on startup, claims with `FOR UPDATE SKIP LOCKED`).
+- **Databases:** primary Postgres (PRISM-owned, the app + job queue), a
+  read-only investment RDS (Stock Dashboard), and a read-only SEBI Postgres
+  (Regulatory Lens). The old read-only company **catalog DB is retired** —
+  company lookups now resolve via `master_securities`.
+- **External services** (`stock-chat`, `bmc`, `prism-financials`, `prism-news`)
+  live on a different VM and are owned by a teammate — we don't deploy them.
 
 ---
 
@@ -165,7 +213,12 @@ relevant routes 503, the rest of the app is fine):
 |---|---|---|
 | News & Sentiment (`/api/v1/news/*`) | `PRISM_NEWS_URL` | the GCP VM's :8001 firewall must allow the EC2 IP |
 | Stock Dashboard (`/api/v1/stocks/*`) | `INVESTMENT_DB_HOST/PORT/NAME/USER/PASSWORD`, `INVESTMENT_DB_SSL_MODE=require` | the **investment RDS security group must allow the EC2 IP** (15.207.146.145), else connect-timeout |
-| Company catalog (`/api/v1/companies`) | `CATALOG_DATABASE_URL` (or `POSTGRES_URL`) | catalog Postgres reachable |
+| Regulatory Lens (`/api/v1/regulatory/*`) | SEBI Postgres connection vars (read-only) | SEBI Postgres reachable from the EC2 IP |
+| Portfolio Builder backtests | primary DB (job queue) + investment RDS (prices) | the **`worker` container must be running** — same `.env`; else jobs stay `queued` |
+
+> **Catalog retired.** The old read-only company catalog DB (`CATALOG_DATABASE_URL`)
+> is gone — company lookups now resolve via `master_securities` on existing DBs.
+> Don't re-introduce a catalog box when reasoning about downstream connectivity.
 
 After adding any of these, re-create the backend (`up -d --force-recreate
 backend`) and confirm via `printenv` + a request to the feature's endpoint.
@@ -190,9 +243,21 @@ finished and the bundle already contains whatever value the build saw.
        dockerfile: Dockerfile
        args:
          NEXT_PUBLIC_API_URL: https://api.thequantsoft.co.in
+         # Auth is ON in prod (Supabase). The anon key is the PUBLISHABLE key —
+         # public by design (it ships in the browser bundle), safe to commit here.
+         # The server-side JWT secret never lives in build args.
+         NEXT_PUBLIC_AUTH_ENABLED: "true"
+         NEXT_PUBLIC_SUPABASE_URL: https://<project>.supabase.co
+         NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_xxx
+         # legacy args still passed but no longer read by src/lib/config.ts:
          NEXT_PUBLIC_LANDING_URL: https://thequantsoft.co.in
          # ... add or change here ...
    ```
+   The app's `src/lib/config.ts` reads only four `NEXT_PUBLIC_*` vars:
+   `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_AUTH_ENABLED`, `NEXT_PUBLIC_SUPABASE_URL`,
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Auth being ON does **not** force login —
+   `REQUIRE_AUTH=false` in `src/middleware.ts` lets anonymous users browse; the
+   `/shared` share-link route is whitelisted regardless.
 2. If adding a new var, also accept it in `Dockerfile`'s builder stage:
    ```dockerfile
    ARG NEXT_PUBLIC_NEW_THING
@@ -419,6 +484,14 @@ Both `deploy.yml` files do roughly the same thing:
 8. (Backend only) `docker compose exec backend alembic upgrade head`.
 9. `docker image prune -f` to free disk.
 
+**The `worker` shares the backend image.** `worker` has no `build:` of its own —
+it runs `prism-backend:latest` (tagged by the `backend` service build) with a
+different entrypoint. So a backend deploy that rebuilds the image should also
+recreate the worker: `docker compose -f docker-compose.prod.yml up -d worker`.
+A backend rollback (re-tag `:previous` → `:latest`) implicitly covers the
+worker too — just re-`up -d worker` afterwards so it picks up the rolled-back
+image.
+
 **Concurrency:** both workflows declare `concurrency.group:` so two pushes
 to production never deploy simultaneously. The second push waits for the
 first to finish. Do not remove this — concurrent deploys can corrupt
@@ -446,8 +519,22 @@ curl -sI https://prism.thequantsoft.co.in/chat | head -1
 curl -sI https://thequantsoft.co.in | head -1
 # Expected: HTTP/1.1 200 OK
 
+# 3b. Public share page is reachable WITHOUT auth (it's in middleware
+#     PUBLIC_PREFIXES; nginx serves it transparently under prism. → frontend).
+#     Use a real shared token, or just confirm the route resolves (not a 404
+#     from the proxy). An invalid token returns the page's own "not found" UI.
+curl -sI "https://prism.thequantsoft.co.in/shared/<token>" | head -1
+# Expected: HTTP/1.1 200 OK  (NOT redirected to /sign-in)
+
+# 3c. Worker is running (else Portfolio-Builder backtests stay `queued`)
+ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145 \
+  "docker ps --filter name=prism-worker --format '{{.Names}} {{.Status}}'"
+# Expected: prism-worker  Up ...
+
 # 4. CORS preflight (after any nginx or main.py CORS change)
-curl -sI -X OPTIONS https://api.thequantsoft.co.in/api/v1/companies \
+# Use any live endpoint — this tests the CORS middleware, not the route itself.
+# (The old /api/v1/companies catalog endpoint is retired; use /api/v1/integrations.)
+curl -sI -X OPTIONS https://api.thequantsoft.co.in/api/v1/integrations \
   -H 'Origin: https://prism.thequantsoft.co.in' \
   -H 'Access-Control-Request-Method: GET' \
   -H 'Access-Control-Request-Headers: x-dev-firm,content-type' | grep -i 'access-control'
@@ -534,6 +621,27 @@ you fix the server.
 **After any CORS-affecting fix:** hard refresh (Ctrl+Shift+R) or
 incognito. If users report it's still broken, walk them through clearing
 site data for `prism.thequantsoft.co.in`.
+
+### Gotcha 7 — Portfolio-Builder backtests stuck `queued` → the worker is down
+
+Portfolio-Builder backtests run in the **`worker` container** (`prism-worker`),
+not the web process — the API only enqueues them into `pb_backtests`. If
+submitted backtests never start (stay `queued`), the worker is almost certainly
+down or never came up after a deploy (it has `depends_on: backend`, but a
+backend that failed its health check can leave the worker un-started).
+
+```bash
+ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145
+docker ps -a --filter name=prism-worker            # is it Up?
+cd ~/PRISM/prism-analyst-platform
+docker compose -f docker-compose.prod.yml logs worker --tail 100
+docker compose -f docker-compose.prod.yml up -d worker   # (re)start it
+```
+
+The worker is restart-safe: it reclaims stale RUNNING jobs on startup and
+claims work with `FOR UPDATE SKIP LOCKED`, so restarting it (or running
+replicas) won't double-run a backtest. Because it shares `prism-backend:latest`,
+it never needs its own build — if the image is current, `up -d worker` is enough.
 
 ---
 
@@ -679,13 +787,15 @@ Suggested order (cheapest-to-most-valuable):
 
 | File | Purpose |
 |---|---|
-| `prism-analyst-platform/docker-compose.prod.yml` | Orchestrates all 4 containers. |
-| `prism-analyst-platform/Dockerfile` | Frontend image. Reads `NEXT_PUBLIC_*` ARGs. |
+| `prism-analyst-platform/docker-compose.prod.yml` | Orchestrates all 5 containers (landing, frontend, backend, worker, nginx). |
+| `prism-analyst-platform/Dockerfile` | Frontend image. Reads `NEXT_PUBLIC_*` ARGs (incl. `NEXT_PUBLIC_AUTH_ENABLED` + Supabase). |
 | `prism-analyst-platform/Dockerfile.landing` | Landing image. |
-| `prism-analyst-platform/nginx.conf` | Reverse proxy + SSL termination. CORS lives in FastAPI, NOT here. |
+| `prism-analyst-platform/deploy-first-time.sh` | From-scratch EC2 bootstrap — clones both repos, writes envs, issues SSL, `up -d --build`. |
+| `prism-analyst-platform/nginx.conf` | Reverse proxy + SSL termination. CORS lives in FastAPI, NOT here. The `prism.` block is a single `location /` → frontend, so `/shared/[token]` is served transparently (no special block). |
 | `prism-analyst-platform/.github/workflows/deploy.yml` | Frontend + landing deploy. |
 | `prism-analyst-platform/.github/workflows/ci.yml` | Frontend CI. |
-| `prism-analyst-services/Dockerfile` | Backend image. Includes `config/` (integration registry). |
+| `prism-analyst-services/Dockerfile` | Backend image (tagged `prism-backend:latest`; the `worker` container reuses it). Includes `config/` (integration registry). |
+| `prism-analyst-services/src/portfolio/worker.py` | The `worker` entrypoint (`python -m src.portfolio.worker`) — runs durable Portfolio-Builder backtests. |
 | `prism-analyst-services/.env` | **Not in git.** Lives on EC2 only. Contains all backend secrets. |
 | `prism-analyst-services/.env.example` | In git. Template; never has real values. |
 | `prism-analyst-services/alembic/versions/` | DB migrations. `alembic upgrade head` runs on each deploy. |

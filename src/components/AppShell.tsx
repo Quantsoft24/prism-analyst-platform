@@ -13,6 +13,8 @@ import styles from "./AppShell.module.css";
 /* ── Props ── */
 interface AppShellProps {
   activeView: NavView;
+  /** session_id of the open conversation (highlights its sidebar recent row). */
+  activeConversationId?: string | null;
   onNavigate: (view: NavView) => void;
   onNewResearch: () => void;
   onRecentChat: (id: string) => void;
@@ -26,6 +28,7 @@ const SIDEBAR_COLLAPSED_KEY = "prism.sidebar.collapsed";
 /* ── Component ── */
 export default function AppShell({
   activeView,
+  activeConversationId,
   onNavigate,
   onNewResearch,
   onRecentChat,
@@ -86,6 +89,7 @@ export default function AppShell({
     >
       <Sidebar
         activeView={activeView}
+        activeConversationId={activeConversationId}
         onNavigate={onNavigate}
         onNewResearch={onNewResearch}
         onRecentChat={onRecentChat}

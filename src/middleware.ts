@@ -17,7 +17,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { config as appConfig } from "@/lib/config";
 
-const PUBLIC_PREFIXES = ["/sign-in", "/sign-up", "/auth"];
+// `/shared` is a public read-only conversation snapshot — must stay reachable
+// without a session even once auth gating is turned on.
+const PUBLIC_PREFIXES = ["/sign-in", "/sign-up", "/auth", "/shared"];
 
 // Per the team's "anonymous can do everything for now" call, login is NOT forced
 // — anonymous visitors browse freely; signing in just adds identity. Flip this

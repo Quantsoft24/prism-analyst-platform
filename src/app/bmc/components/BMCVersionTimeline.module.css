@@ -1,0 +1,38 @@
+/* BMC version history strip. Token-only → themes light + dark. */
+
+.wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+.row { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.chip:hover { border-color: var(--accent); }
+.chipActive { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-deep); }
+.chipV { font-weight: 700; font-family: var(--font-mono, monospace); }
+.latest { font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pos); }
+.chipMeta { color: var(--ink-mute); font-size: 10.5px; }
