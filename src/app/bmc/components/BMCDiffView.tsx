@@ -49,6 +49,14 @@ export default function BMCDiffView({ ticker, companyName }: Props) {
   const [periodB, setPeriodB] = React.useState("");
   const diff = useBMCDiff(ticker);
 
+  // Recent fiscal years to pick from (a year control, not company data). The
+  // diff endpoint auto-builds a period's canvas if it isn't cached; an absent
+  // period surfaces as a clear error below.
+  const years = React.useMemo(() => {
+    const now = new Date().getFullYear();
+    return Array.from({ length: 6 }, (_, i) => String(now - i));
+  }, []);
+
   const run = () => {
     const a = periodA.trim();
     const b = periodB.trim();
@@ -64,25 +72,33 @@ export default function BMCDiffView({ ticker, companyName }: Props) {
         <GitCompareArrows size={15} className={styles.icon} />
         <span className={styles.label}>Compare {companyName}&apos;s business model across two fiscal years</span>
         <div className={styles.periodRow}>
-          <input
+          <select
             className={styles.periodInput}
             value={periodA}
             onChange={(e) => setPeriodA(e.target.value)}
-            placeholder="FY A (e.g. 2024)"
-            aria-label="Period A"
-          />
+            aria-label="Earlier fiscal year"
+          >
+            <option value="">From FY…</option>
+            {years.map((y) => (
+              <option key={y} value={y}>FY{y}</option>
+            ))}
+          </select>
           <ArrowRight size={14} className={styles.arrow} />
-          <input
+          <select
             className={styles.periodInput}
             value={periodB}
             onChange={(e) => setPeriodB(e.target.value)}
-            placeholder="FY B (e.g. 2026)"
-            aria-label="Period B"
-          />
+            aria-label="Later fiscal year"
+          >
+            <option value="">To FY…</option>
+            {years.map((y) => (
+              <option key={y} value={y}>FY{y}</option>
+            ))}
+          </select>
           <button
             className={styles.runBtn}
             onClick={run}
-            disabled={diff.isPending || !periodA.trim() || !periodB.trim() || periodA.trim() === periodB.trim()}
+            disabled={diff.isPending || !periodA || !periodB || periodA === periodB}
           >
             {diff.isPending ? <><Loader2 size={14} className={styles.spin} /> Comparing…</> : "Compare"}
           </button>

@@ -13,7 +13,7 @@ import {
   type BMCBlock as BMCBlockData,
   type BMCEvidence,
 } from "@/lib/api/bmc";
-import SecuritySearch from "@/app/stocks/components/SecuritySearch";
+import { useSecurities } from "@/lib/api/stocks";
 import FilingPdfViewer, { type FilingPdfSource } from "@/app/chat/components/FilingPdfViewer";
 
 import BMCBlock from "./BMCBlock";
@@ -24,20 +24,6 @@ import BMC3DExplorer from "./BMC3DExplorer";
 import BMCLibrary from "./BMCLibrary";
 import BMCHome from "./BMCHome";
 import styles from "./BMCView.module.css";
-
-/** block_id → Osterwalder grid-area class (applied only ≥1200px; below that the
- *  blocks flow in canonical order). */
-const AREA_CLASS: Record<string, string> = {
-  key_partnerships: styles.aKp,
-  key_activities: styles.aKa,
-  key_resources: styles.aKr,
-  value_propositions: styles.aVp,
-  customer_relationships: styles.aCr,
-  channels: styles.aCh,
-  customer_segments: styles.aCs,
-  cost_structure: styles.aCost,
-  revenue_streams: styles.aRev,
-};
 
 interface BMCViewProps {
   /** Ticker to open with (from chat handoff `?ticker=` or `@bmc`). */
@@ -51,6 +37,7 @@ type Tab = "home" | "library";
 
 export default function BMCView({ initialTicker, initialTab }: BMCViewProps) {
   const [tab, setTab] = React.useState<Tab>(initialTab ?? "home");
+  const [cameFrom, setCameFrom] = React.useState<"dashboard" | "library">("dashboard");
   const [ticker, setTicker] = React.useState<string | null>(initialTicker ?? null);
   const [securityId, setSecurityId] = React.useState<number | null>(null);
   const [companyName, setCompanyName] = React.useState<string | null>(null);
@@ -59,6 +46,31 @@ export default function BMCView({ initialTicker, initialTab }: BMCViewProps) {
   const [selectedBlock, setSelectedBlock] = React.useState<BMCBlockData | null>(null);
   const [pdfSource, setPdfSource] = React.useState<FilingPdfSource | null>(null);
   const [exporting, setExporting] = React.useState(false);
+  const [pdfWidth, setPdfWidth] = React.useState(560);
+  const [resizing, setResizing] = React.useState(false);
+
+  // Drag-to-resize the citation PDF panel (handle on its left edge → width grows
+  // as the cursor moves left). Clamped to a sensible min and ~85% of the window.
+  React.useEffect(() => {
+    if (!resizing) return;
+    const onMove = (e: MouseEvent) => {
+      const w = window.innerWidth - e.clientX;
+      setPdfWidth(Math.min(Math.max(w, 380), Math.round(window.innerWidth * 0.85)));
+    };
+    const onUp = () => setResizing(false);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    const prevSelect = document.body.style.userSelect;
+    const prevCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = prevSelect;
+      document.body.style.cursor = prevCursor;
+    };
+  }, [resizing]);
 
   const latest = useBMC(ticker);
   const versioned = useBMCVersion(ticker, activeVersion);
@@ -113,16 +125,34 @@ export default function BMCView({ initialTicker, initialTab }: BMCViewProps) {
     syncUrl(t, ticker);
   };
 
-  // Open a canvas chosen from the Library gallery / Continue cards, in Home.
-  const openFromLibrary = (t: string, name?: string | null) => {
+  // Open a company's canvas in Home. `origin` records where the user came from
+  // (dashboard vs library) so the in-canvas back link returns them there.
+  const openCanvas = (t: string, name: string | null, origin: "dashboard" | "library") => {
     setTicker(t);
     setSecurityId(null);
     setCompanyName(name ?? null);
     setActiveVersion(null);
     setSelectedBlock(null);
     setMode("canvas");
+    setCameFrom(origin);
     setTab("home");
     syncUrl("home", t);
+  };
+
+  // Back from an open canvas → wherever it was opened from (Library or Dashboard).
+  const goBack = () => {
+    if (cameFrom === "library") {
+      setTicker(null);
+      setSecurityId(null);
+      setCompanyName(null);
+      setActiveVersion(null);
+      setSelectedBlock(null);
+      setMode("canvas");
+      setTab("library");
+      syncUrl("library", null);
+    } else {
+      goDashboard();
+    }
   };
 
   const bmc = activeVersion != null ? versioned.data : latest.data;
@@ -138,6 +168,7 @@ export default function BMCView({ initialTicker, initialTab }: BMCViewProps) {
     setActiveVersion(null);
     setSelectedBlock(null);
     setMode("canvas");
+    setCameFrom("dashboard");
     setTab("home");
     syncUrl("home", t);
   };
@@ -145,6 +176,36 @@ export default function BMCView({ initialTicker, initialTab }: BMCViewProps) {
   // Build a suggested company (from the Home dashboard) — same path as a pick.
   const onBuild = (symbol: string, securityId: number, name: string | null) =>
     onPickCompany({ symbol, security_id: securityId, security_name: name });
+
+  // Resolve a display name even before a canvas loads (e.g. after a refresh of
+  // ?ticker=, where companyName state is gone) — look it up in the cached
+  // securities index by symbol or name, falling back to the ticker.
+  const securities = useSecurities();
+  const resolvedName = React.useMemo(() => {
+    if (bmc?.company_name) return bmc.company_name;
+    if (companyName) return companyName;
+    const hit = securities.data?.find((s) => s.symbol === ticker || s.security_name === ticker);
+    return hit?.security_name ?? ticker ?? "";
+  }, [bmc?.company_name, companyName, securities.data, ticker]);
+
+  // The integer security_id pins the exact NSE/BSE entity (fast-path) so the BMC
+  // service doesn't fall back to fuzzy ticker resolution (which fails for many
+  // symbols → "no filings in catalog"). Resolve it from the cached securities
+  // index by symbol/name when the picked-state value is gone (e.g. after a
+  // refresh, where only ?ticker= survives), so it's ALWAYS sent when known.
+  const resolvedSecurityId = React.useMemo(() => {
+    if (securityId != null) return securityId;
+    const hit = securities.data?.find((s) => s.symbol === ticker || s.security_name === ticker);
+    return hit?.security_id ?? null;
+  }, [securityId, securities.data, ticker]);
+
+  // Regenerating an existing canvas costs ~30–60s + LLM spend — confirm first.
+  const onGenerate = () => {
+    if (bmc && !window.confirm(`Regenerate ${resolvedName}'s canvas? This rebuilds it from the latest filings (~30–60s).`)) {
+      return;
+    }
+    generate.mutate({ securityId: resolvedSecurityId ?? undefined });
+  };
 
   const openPdf = (ev: BMCEvidence) => {
     if (!ev.pdf_url) return;
@@ -197,114 +258,119 @@ export default function BMCView({ initialTicker, initialTab }: BMCViewProps) {
           </button>
         </nav>
 
-        {tab === "library" && <BMCLibrary onOpen={openFromLibrary} />}
+        {tab === "library" && (
+          <BMCLibrary onOpen={(t, name) => openCanvas(t, name ?? null, "library")} />
+        )}
 
         {/* Idle Home = the dashboard (owns its own hero + search). */}
         {tab === "home" && !ticker && (
-          <BMCHome onPickCompany={onPickCompany} onOpen={openFromLibrary} onBuild={onBuild} />
+          <BMCHome
+            onPickCompany={onPickCompany}
+            onOpen={(t, name) => openCanvas(t, name ?? null, "dashboard")}
+            onBuild={onBuild}
+          />
         )}
 
         {/* Active Home = the canvas workspace for the open company. */}
         {tab === "home" && ticker && (
         <>
-        {/* ── Header / controls ── */}
+        {/* ── Header ── */}
         <header className={styles.header}>
-          <button type="button" className={styles.backLink} onClick={goDashboard}>
-            <ArrowLeft size={14} /> Dashboard
+          <button type="button" className={styles.backLink} onClick={goBack}>
+            <ArrowLeft size={14} /> {cameFrom === "library" ? "Library" : "Dashboard"}
           </button>
-          <div className={styles.titleRow}>
-            <LayoutGrid size={18} className={styles.icon} />
-            <div className={styles.titleStack}>
-              <span className={styles.eyebrow}>Business Model Canvas</span>
+
+          <div className={styles.titleBar}>
+            <div className={styles.titleLeft}>
+              <LayoutGrid size={20} className={styles.icon} />
               <h1 className={styles.title}>
+                <span className={styles.companyTitle}>{resolvedName}</span>
                 {(() => {
-                  const displayName = bmc?.company_name ?? companyName ?? ticker;
-                  // Only show the ticker chip when it's a real symbol (short, no
+                  // Show the ticker chip only when it's a real symbol (short, no
                   // spaces) distinct from the name — library tickers can be the
-                  // full company name, where a chip would just duplicate it.
+                  // full name, where a chip would just duplicate it.
                   const showBadge =
-                    !!ticker && ticker !== displayName && !ticker.includes(" ") && ticker.length <= 20;
-                  return (
-                    <>
-                      <span>{displayName}</span>
-                      {showBadge && <span className={styles.tickerBadge}>{ticker}</span>}
-                    </>
-                  );
+                    !!ticker && ticker !== resolvedName && !ticker.includes(" ") && ticker.length <= 20;
+                  return showBadge ? <span className={styles.tickerBadge}>{ticker}</span> : null;
                 })()}
+                {bmc && (
+                  <span
+                    className={cn(
+                      styles.statusBadge,
+                      bmc.status === "complete" ? styles.statusComplete : styles.statusPartial,
+                    )}
+                  >
+                    {bmc.status} · v{bmc.version}
+                    {bmc.overall_confidence != null ? ` · ${Math.round(bmc.overall_confidence * 100)}%` : ""}
+                  </span>
+                )}
               </h1>
             </div>
-          </div>
-          <p className={styles.subtitle}>
-            A filing‑grounded 9‑block map of how a company creates, delivers, and captures value.
-            Every fact cites a primary source — click a marker to open the exact filing page.
-          </p>
 
-          <div className={styles.controls}>
-            <div className={styles.picker}>
-              <SecuritySearch onSelect={onPickCompany} selectedId={securityId} />
+            <div className={styles.actions}>
+              {bmc ? (
+                <>
+                  <button
+                    className={styles.exportBtn}
+                    onClick={() => handleExport("pdf")}
+                    disabled={exporting}
+                    title="Download as PDF"
+                  >
+                    {exporting ? <Loader2 size={14} className={styles.spin} /> : <Download size={14} />} PDF
+                  </button>
+                  <button
+                    className={styles.btn}
+                    onClick={onGenerate}
+                    disabled={generate.isPending}
+                    title="Rebuild from the latest filings (~30–60s)"
+                  >
+                    {generate.isPending ? (
+                      <><Loader2 size={15} className={styles.spin} /> Regenerating…</>
+                    ) : (
+                      <><Sparkles size={15} /> Regenerate</>
+                    )}
+                  </button>
+                </>
+              ) : (
+                <button
+                  className={cn(styles.btn, styles.btnPrimary)}
+                  onClick={onGenerate}
+                  disabled={generate.isPending}
+                  title="Build a canvas from the latest filings (~30–60s)"
+                >
+                  {generate.isPending ? (
+                    <><Loader2 size={15} className={styles.spin} /> Generating…</>
+                  ) : (
+                    <><Sparkles size={15} /> Generate</>
+                  )}
+                </button>
+              )}
             </div>
-            {ticker && (
-              <button
-                className={cn(styles.btn, styles.btnPrimary)}
-                onClick={() => generate.mutate({ securityId: securityId ?? undefined })}
-                disabled={generate.isPending}
-                title="Build a fresh canvas from the latest filings (~30s)"
-              >
-                {generate.isPending ? (
-                  <><Loader2 size={15} className={styles.spin} /> Generating…</>
-                ) : (
-                  <><Sparkles size={15} /> {bmc ? "Regenerate" : "Generate"}</>
-                )}
-              </button>
-            )}
           </div>
 
           {bmc && (
-            <div className={styles.toolbar}>
-              <div className={styles.modeToggle} role="tablist">
-                <button
-                  role="tab"
-                  className={cn(styles.modeBtn, mode === "canvas" && styles.modeBtnActive)}
-                  onClick={() => setMode("canvas")}
-                >
-                  <LayoutGrid size={13} /> Canvas
-                </button>
-                <button
-                  role="tab"
-                  className={cn(styles.modeBtn, mode === "explore" && styles.modeBtnActive)}
-                  onClick={() => setMode("explore")}
-                >
-                  <Box size={13} /> 3D Explorer
-                </button>
-                <button
-                  role="tab"
-                  className={cn(styles.modeBtn, mode === "compare" && styles.modeBtnActive)}
-                  onClick={() => setMode("compare")}
-                >
-                  <GitCompareArrows size={13} /> Compare periods
-                </button>
-              </div>
-              <div className={styles.toolbarRight}>
-                <span
-                  className={cn(
-                    styles.statusBadge,
-                    bmc.status === "complete" ? styles.statusComplete : styles.statusPartial,
-                  )}
-                >
-                  {bmc.status} · v{bmc.version}
-                  {bmc.overall_confidence != null
-                    ? ` · ${Math.round(bmc.overall_confidence * 100)}%`
-                    : ""}
-                </span>
-                <button
-                  className={styles.exportBtn}
-                  onClick={() => handleExport("pdf")}
-                  disabled={exporting}
-                  title="Download as PDF"
-                >
-                  {exporting ? <Loader2 size={13} className={styles.spin} /> : <Download size={13} />} PDF
-                </button>
-              </div>
+            <div className={styles.modeToggle} role="tablist">
+              <button
+                role="tab"
+                className={cn(styles.modeBtn, mode === "canvas" && styles.modeBtnActive)}
+                onClick={() => setMode("canvas")}
+              >
+                <LayoutGrid size={13} /> Canvas
+              </button>
+              <button
+                role="tab"
+                className={cn(styles.modeBtn, mode === "explore" && styles.modeBtnActive)}
+                onClick={() => setMode("explore")}
+              >
+                <Box size={13} /> 3D Explorer
+              </button>
+              <button
+                role="tab"
+                className={cn(styles.modeBtn, mode === "compare" && styles.modeBtnActive)}
+                onClick={() => setMode("compare")}
+              >
+                <GitCompareArrows size={13} /> Compare periods
+              </button>
             </div>
           )}
         </header>
@@ -316,7 +382,17 @@ export default function BMCView({ initialTicker, initialTab }: BMCViewProps) {
           </p>
         )}
 
-        {isLoading && (
+        {generate.isPending && (
+          <div className={styles.generatingBanner}>
+            <Loader2 size={15} className={styles.spin} />
+            <span>
+              Building <strong>{resolvedName}</strong>&apos;s canvas from its filings — reading the
+              annual report, investor presentation &amp; latest results. This usually takes ~30–60s.
+            </span>
+          </div>
+        )}
+
+        {(isLoading || (generate.isPending && !bmc)) && (
           <div className={styles.skeletonGrid}>
             {Array.from({ length: 9 }).map((_, i) => (
               <div key={i} className={styles.skeletonCell} />
@@ -326,10 +402,10 @@ export default function BMCView({ initialTicker, initialTab }: BMCViewProps) {
 
         {noCanvasYet && !generate.isPending && (
           <div className={styles.emptyCard}>
-            <p className={styles.emptyTitle}>No canvas for <span className={styles.mono}>{ticker}</span> yet.</p>
+            <p className={styles.emptyTitle}>No canvas for <span className={styles.mono}>{resolvedName}</span> yet.</p>
             <p className={styles.emptyHint}>
               Click <strong>Generate</strong> — PRISM builds a 9‑block canvas grounded in{" "}
-              {companyName ?? ticker}&apos;s filings (~30s).
+              {resolvedName}&apos;s filings (~30s).
             </p>
           </div>
         )}
@@ -360,8 +436,13 @@ export default function BMCView({ initialTicker, initialTab }: BMCViewProps) {
           <>
             <div className={styles.canvas}>
               {bmc.blocks.map((block) => (
-                <div key={block.block_id} className={cn(styles.cell, AREA_CLASS[block.block_id])}>
-                  <BMCBlock block={block} onOpenPdf={openPdf} onDrillDown={setSelectedBlock} />
+                <div key={block.block_id} className={styles.cell}>
+                  <BMCBlock
+                    block={block}
+                    companyName={bmc.company_name ?? resolvedName}
+                    onOpenPdf={openPdf}
+                    onDrillDown={setSelectedBlock}
+                  />
                 </div>
               ))}
             </div>
@@ -419,8 +500,29 @@ export default function BMCView({ initialTicker, initialTab }: BMCViewProps) {
         />
       )}
 
-      {/* Citation → source PDF (reuses the chat's viewer) */}
-      {pdfSource && <FilingPdfViewer source={pdfSource} onClose={() => setPdfSource(null)} />}
+      {/* While dragging, a transparent overlay sits ABOVE the PDF iframe so the
+          drag's mouse events stay in this document (an iframe would otherwise
+          swallow them — making the drag jerky and impossible to narrow). */}
+      {resizing && <div className={styles.resizeOverlay} />}
+
+      {/* Citation → source PDF — a resizable right-hand panel (drag the left edge). */}
+      {pdfSource && (
+        <aside className={styles.pdfPanel} style={{ width: pdfWidth }}>
+          <div
+            className={cn(styles.pdfResize, resizing && styles.pdfResizing)}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setResizing(true);
+            }}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize the source panel"
+          />
+          <div className={styles.pdfBody}>
+            <FilingPdfViewer source={pdfSource} onClose={() => setPdfSource(null)} />
+          </div>
+        </aside>
+      )}
     </div>
   );
 }

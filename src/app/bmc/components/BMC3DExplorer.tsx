@@ -164,6 +164,14 @@ export default function BMC3DExplorer({ bmc, onSelectBlock }: BMC3DExplorerProps
     }, 60);
   }, [bmc]);
 
+  // Auto-expand shortly after mount (and on canvas change) so the explorer shows
+  // the full 9-block graph by default — a lone core node read as "broken/empty".
+  // A brief delay lets the core render first, giving a small reveal animation.
+  React.useEffect(() => {
+    const t = setTimeout(() => expand(), 450);
+    return () => clearTimeout(t);
+  }, [expand]);
+
   const handleNodeClick = React.useCallback(
     (node: any) => {
       if (node.isCenter) {

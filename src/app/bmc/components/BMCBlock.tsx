@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { MessageCircle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { BMCBlock as BMCBlockData, BMCEvidence } from "@/lib/api/bmc";
@@ -8,6 +9,8 @@ import styles from "./BMCBlock.module.css";
 
 interface BMCBlockProps {
   block: BMCBlockData;
+  /** Company name — used as the citation popover's title (matches chat). */
+  companyName?: string;
   /** Open the source PDF for a cited fact (deep-links to the page). */
   onOpenPdf?: (ev: BMCEvidence) => void;
   /** Open the per-block evidence + drill-down chat panel. */
@@ -25,6 +28,7 @@ function renderBullet(
   text: string,
   evidenceByMarker: Map<string, BMCEvidence>,
   onOpenPdf?: (ev: BMCEvidence) => void,
+  companyName?: string,
 ): React.ReactNode[] {
   const parts = text.split(/(\[[\d,\s]+\])/g);
   return parts.map((part, i) => {
@@ -37,20 +41,37 @@ function renderBullet(
           const ev = evidenceByMarker.get(`[${n}]`);
           const clickable = !!ev?.pdf_url && !!onOpenPdf;
           return (
-            <button
-              key={j}
-              type="button"
-              className={cn(styles.cite, clickable && styles.citeLink)}
-              onClick={clickable ? () => onOpenPdf!(ev!) : undefined}
-              disabled={!clickable}
-              title={
-                ev
-                  ? `${ev.page != null ? `p.${ev.page}` : "source"} — ${ev.excerpt.slice(0, 90)}${ev.excerpt.length > 90 ? "…" : ""}`
-                  : `Source [${n}]`
-              }
-            >
-              {n}
-            </button>
+            <span key={j} className={styles.citeWrap} tabIndex={0}>
+              <button
+                type="button"
+                className={cn(styles.cite, clickable && styles.citeLink)}
+                onClick={clickable ? () => onOpenPdf!(ev!) : undefined}
+                disabled={!clickable}
+                aria-label={ev?.page != null ? `Source, page ${ev.page}` : `Source ${n}`}
+              >
+                {n}
+              </button>
+              {ev && (
+                <span role="tooltip" className={styles.citePopover}>
+                  <span className={styles.citePopoverLabel}>
+                    {companyName ?? "Filing"}{ev.page != null ? ` — p.${ev.page}` : ""}
+                  </span>
+                  <span className={styles.citePopoverMeta}>
+                    <span className={styles.citePopoverKind}>filing</span>
+                    {ev.page != null && <span>· p.{ev.page}</span>}
+                  </span>
+                  {clickable && (
+                    <button
+                      type="button"
+                      className={styles.citePopoverLink}
+                      onClick={() => onOpenPdf!(ev)}
+                    >
+                      Open PDF{ev.page != null ? ` at p.${ev.page}` : ""} ↗
+                    </button>
+                  )}
+                </span>
+              )}
+            </span>
           );
         })}
       </sup>
@@ -64,7 +85,7 @@ function confidenceClass(c: number): string {
   return styles.confNeg;
 }
 
-export default function BMCBlock({ block, onOpenPdf, onDrillDown, className }: BMCBlockProps) {
+export default function BMCBlock({ block, companyName, onOpenPdf, onDrillDown, className }: BMCBlockProps) {
   const isEmpty = block.status !== "ok" || block.summary_bullets.length === 0;
   const evidenceByMarker = React.useMemo(() => {
     const m = new Map<string, BMCEvidence>();
@@ -76,16 +97,18 @@ export default function BMCBlock({ block, onOpenPdf, onDrillDown, className }: B
     <section className={cn(styles.block, className)} aria-label={block.title}>
       <header className={styles.header}>
         <h3 className={styles.title}>{block.title}</h3>
-        {block.status === "ok" ? (
+        {/* Only flag confidence when it's notable — well-grounded blocks stay
+            clean (showing the same high % on all nine reads as noise). */}
+        {block.status !== "ok" ? (
+          <span className={cn(styles.confidence, styles.confMissing)}>no evidence</span>
+        ) : block.confidence < 0.75 ? (
           <span
             className={cn(styles.confidence, confidenceClass(block.confidence))}
-            title="Filing-evidence confidence for this block"
+            title="Filing-evidence confidence for this block — lower means thinner disclosure"
           >
-            {Math.round(block.confidence * 100)}%
+            {Math.round(block.confidence * 100)}% confidence
           </span>
-        ) : (
-          <span className={cn(styles.confidence, styles.confMissing)}>no evidence</span>
-        )}
+        ) : null}
       </header>
 
       <div className={styles.body}>
@@ -99,7 +122,7 @@ export default function BMCBlock({ block, onOpenPdf, onDrillDown, className }: B
               <li key={i} className={styles.bullet}>
                 <span className={styles.bulletDot} aria-hidden />
                 <span className={styles.bulletText}>
-                  {renderBullet(bullet, evidenceByMarker, onOpenPdf)}
+                  {renderBullet(bullet, evidenceByMarker, onOpenPdf, companyName)}
                 </span>
               </li>
             ))}
@@ -126,8 +149,10 @@ export default function BMCBlock({ block, onOpenPdf, onDrillDown, className }: B
             type="button"
             className={styles.drillBtn}
             onClick={() => onDrillDown?.(block)}
+            title="Open the sources and ask a follow-up about this block"
           >
-            {block.evidence.length} source{block.evidence.length === 1 ? "" : "s"} · ask
+            <MessageCircle size={12} /> Ask about this block
+            <span className={styles.drillCount}>· {block.evidence.length} source{block.evidence.length === 1 ? "" : "s"}</span>
           </button>
         </footer>
       )}

@@ -36,7 +36,7 @@ export default function BMCHome({ onPickCompany, onOpen, onBuild }: BMCHomeProps
   }, [entries]);
 
   const recent = entries.slice(0, 3);
-  const isEmpty = !lib.isLoading && entries.length === 0;
+  const isEmpty = !lib.isLoading && !lib.isError && entries.length === 0;
 
   return (
     <div className={styles.home}>
@@ -52,6 +52,17 @@ export default function BMCHome({ onPickCompany, onOpen, onBuild }: BMCHomeProps
         </div>
       </section>
 
+      {/* ── Couldn't load the library (distinct from "no canvases yet") ── */}
+      {lib.isError && (
+        <section className={styles.firstRun}>
+          <p className={styles.firstRunTitle}>Couldn&apos;t load your canvases.</p>
+          <p className={styles.firstRunHint}>
+            There was a problem reaching the canvas library. Refresh the page or try again shortly —
+            you can still build a new canvas from the search above.
+          </p>
+        </section>
+      )}
+
       {/* ── First-run: inform → inspire → activate ── */}
       {isEmpty && (
         <section className={styles.firstRun}>
@@ -64,7 +75,7 @@ export default function BMCHome({ onPickCompany, onOpen, onBuild }: BMCHomeProps
       )}
 
       {/* ── Coverage at-a-glance (only once there's something to show) ── */}
-      {!isEmpty && (
+      {!isEmpty && !lib.isError && (
         <section className={styles.stats}>
           <Stat icon={<Layers size={16} />} value={stats.count} label={`canvas${stats.count === 1 ? "" : "es"}`} />
           <Stat icon={<TrendingUp size={16} />} value={stats.sectors} label={`sector${stats.sectors === 1 ? "" : "s"} covered`} />

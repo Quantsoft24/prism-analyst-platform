@@ -99,6 +99,85 @@
 .citeLink:focus-visible { outline: 1.5px solid var(--accent); outline-offset: 1px; }
 .cite:disabled { cursor: default; opacity: 0.7; }
 
+/* Hover/focus preview card — mirrors the chat citation popover (pure CSS). */
+.citeWrap { position: relative; display: inline-block; outline: none; }
+.citePopover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md, 0 6px 20px rgba(0, 0, 0, 0.12));
+  text-align: left;
+  white-space: normal;
+  /* The marker is a <sup>; reset its superscript font/line-height so the
+     popover rows lay out normally (otherwise they collapse + overlap). */
+  font-size: 13px;
+  line-height: 1.5;
+  vertical-align: baseline;
+  z-index: 20;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.citeWrap:hover .citePopover,
+.citeWrap:focus-within .citePopover {
+  display: flex;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+.citePopoverLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.citePopoverMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ink-mute);
+}
+.citePopoverKind {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-tint);
+  color: var(--ink-mute);
+}
+.citePopoverExcerpt {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+.citePopoverLink {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: 2px;
+  text-align: left;
+  cursor: pointer;
+}
+.citePopoverLink:hover { text-decoration: underline; }
+
 /* Key takeaways — the cross-bullet synthesis layer, visually distinct. */
 .insights {
   margin-top: 12px;
@@ -136,6 +215,10 @@
   border-top: 1px solid var(--line-soft);
 }
 .drillBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   width: 100%;
   padding: 5px 8px;
   border: 1px solid var(--line);
@@ -148,3 +231,5 @@
   transition: all var(--transition-fast);
 }
 .drillBtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.drillCount { font-weight: 500; color: var(--ink-faint); }
+.drillBtn:hover .drillCount { color: var(--accent); }

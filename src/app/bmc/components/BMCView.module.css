@@ -3,6 +3,44 @@
  * 2-col ≥700px, single-column on mobile. */
 
 .view { display: flex; height: 100%; width: 100%; min-width: 0; }
+
+/* ── Citation source PDF panel (resizable) ── */
+.pdfPanel {
+  position: relative;
+  flex-shrink: 0;
+  height: 100%;
+  max-width: 90vw;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+}
+.pdfResize {
+  position: absolute;
+  left: -5px;
+  top: 0;
+  bottom: 0;
+  width: 11px;
+  z-index: 5;
+  cursor: col-resize;
+  transition: background var(--transition-fast, 0.15s);
+}
+.pdfResize:hover,
+.pdfResizing { background: var(--accent-soft); }
+.pdfBody { position: absolute; inset: 0; display: flex; }
+.pdfBody > * { flex: 1; min-width: 0; height: 100%; }
+
+/* Transparent capture layer shown only while dragging the resize handle — keeps
+   pointer events off the PDF iframe so the drag is smooth and can narrow again. */
+.resizeOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  cursor: col-resize;
+}
+
+@media (max-width: 720px) {
+  /* On narrow screens the panel takes over as a full overlay. */
+  .pdfPanel { position: fixed; inset: 0; width: 100% !important; max-width: 100%; z-index: 50; }
+}
 .main {
   display: flex;
   flex: 1;
@@ -59,25 +97,29 @@
   transition: color var(--transition-fast, 0.15s);
 }
 .backLink:hover { color: var(--accent); }
-.titleRow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.titleStack { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.eyebrow {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
+/* Title bar: company identity (left) + actions (right). */
+.titleBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
+.titleLeft { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .title {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  margin: 0;
+}
+.companyTitle {
   font-family: var(--font-display);
   font-size: clamp(20px, 3vw, 26px);
   letter-spacing: -0.01em;
   color: var(--ink);
 }
+.actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .tickerBadge {
   font-family: var(--font-mono, monospace);
   font-size: 12px;
@@ -147,14 +189,14 @@
 .exportBtn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 30px;
-  padding: 0 11px;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elev);
+  border-radius: var(--radius-md);
+  background: var(--bg-tint);
   color: var(--ink-soft);
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -166,6 +208,20 @@
 
 /* ── States ── */
 .errorText { font-size: 13.5px; color: var(--neg); }
+
+.generatingBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+}
+.generatingBanner strong { font-weight: 650; }
 .emptyCard {
   padding: 36px 24px;
   border: 1px dashed var(--line);
@@ -191,34 +247,24 @@
   text-transform: capitalize;
 }
 
-/* ── Canvas grid ── */
-.canvas { display: grid; grid-template-columns: 1fr; gap: 12px; }
-.cell { display: flex; min-width: 0; }
+/* ── Canvas (masonry) ──
+   Cards have very different heights (Cost Structure vs Customer Segments), so a
+   fixed spatial grid leaves big whitespace gaps. CSS multi-column packing lets
+   each card size to its content and tile tightly with no gaps — responsive and
+   no JS. break-inside keeps a card whole within a column. */
+.canvas {
+  column-count: 1;
+  column-gap: 14px;
+}
+.cell {
+  break-inside: avoid;
+  margin: 0 0 14px;
+}
 .cell > * { width: 100%; }
 
-@media (min-width: 700px) {
-  .canvas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (min-width: 1200px) {
-  /* Canonical Osterwalder spatial layout. */
-  .canvas {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    grid-auto-rows: 1fr;
-    grid-template-areas:
-      "kp ka vp cr cs"
-      "kp kr vp ch cs"
-      "cost cost rev rev rev";
-  }
-  .aKp { grid-area: kp; }
-  .aKa { grid-area: ka; }
-  .aKr { grid-area: kr; }
-  .aVp { grid-area: vp; }
-  .aCr { grid-area: cr; }
-  .aCh { grid-area: ch; }
-  .aCs { grid-area: cs; }
-  .aCost { grid-area: cost; }
-  .aRev { grid-area: rev; }
-}
+@media (min-width: 680px)  { .canvas { column-count: 2; } }
+@media (min-width: 1180px) { .canvas { column-count: 3; } }
+@media (min-width: 1680px) { .canvas { column-count: 4; } }
 
 .skeletonGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 @media (min-width: 1200px) { .skeletonGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
