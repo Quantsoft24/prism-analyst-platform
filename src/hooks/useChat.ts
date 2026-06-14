@@ -16,7 +16,11 @@ import {
   type PlanStep,
   type ToolNextAction,
 } from "@/lib/api/chat";
-import { conversationKeys, conversationsApi } from "@/lib/api/conversations";
+import {
+  conversationKeys,
+  conversationsApi,
+  type MessageFeedback,
+} from "@/lib/api/conversations";
 import { quotaKeys } from "@/lib/api/quota";
 import {
   INTENT_CONFIGS,
@@ -98,6 +102,15 @@ export interface ChatMessage {
    *  answered on the next turn). Rendered like the live view — pills only, no
    *  answer block / Copy / Open-report footer / empty-answer fallback. */
   isClarificationTurn?: boolean;
+  /** The agent_runs id for THIS assistant turn — set on the SSE `meta` event
+   *  (live) or from the replayed turn. Keys per-answer feedback (👍/👎). */
+  agentRunId?: string | null;
+  /** The caller's saved rating of this answer, surfaced on replay so the footer
+   *  renders the pressed 👍/👎 state. */
+  feedback?: MessageFeedback | null;
+  /** The model stopped at its output-token cap (answer cut off) → the thread
+   *  shows a "Continue generating" action on this (latest) turn. */
+  truncated?: boolean;
 }
 
 interface UseChatReturn {
@@ -156,13 +169,13 @@ export function useChat(): UseChatReturn {
   // The new conversation row should appear in the sidebar as soon as the run
   // starts — refresh the LIST only (quota hasn't meaningfully changed yet).
   const refreshConversationsOnly = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: conversationKeys.list });
+    void queryClient.invalidateQueries({ queryKey: conversationKeys.lists() });
   }, [queryClient]);
   // A turn finished — refresh the list (preview / last-activity) AND quota
   // (the message was consumed). One combined refresh per terminal event, so a
   // turn triggers at most one quota refetch instead of one per event handler.
   const refreshAfterTurn = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: conversationKeys.list });
+    void queryClient.invalidateQueries({ queryKey: conversationKeys.lists() });
     void queryClient.invalidateQueries({ queryKey: quotaKeys.quota });
   }, [queryClient]);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -263,6 +276,14 @@ export function useChat(): UseChatReturn {
               session_id: event.session_id,
               agent_name: event.agent_name,
             }));
+            // Stamp THIS turn's assistant message with its run id so the answer
+            // footer can submit per-answer feedback (👍/👎) against it.
+            setMessages((prev) =>
+              updateLastAssistant(prev, (msg) => ({
+                ...msg,
+                agentRunId: event.agent_run_id,
+              })),
+            );
             // The agent_runs row now exists → the conversation list (sidebar /
             // dashboard / account) should pick it up without a page refresh.
             refreshConversationsOnly();
@@ -316,13 +337,20 @@ export function useChat(): UseChatReturn {
                 const tools = msg.toolCalls.slice();
                 const buffered = freshnessBufferRef.current.get(event.call_id);
                 if (buffered) freshnessBufferRef.current.delete(event.call_id);
+                // `bmc_not_found` is the DESIGNED cold-start signal (no saved
+                // canvas yet → the agent then calls bmc_generate), not a failure.
+                // Render it as a normal "done" step so it doesn't inflate the
+                // "N failed" count or show an alarming error card.
+                const coldStart = !event.ok && event.error_code === "bmc_not_found";
                 tools[idx] = {
                   ...tools[idx],
-                  status: event.ok ? "done" : "error",
-                  result_summary: event.result_summary ?? null,
-                  error: event.error ?? null,
-                  error_code: event.error_code ?? null,
-                  next_action: event.next_action ?? null,
+                  status: event.ok || coldStart ? "done" : "error",
+                  result_summary: coldStart
+                    ? "no saved canvas yet — generating"
+                    : (event.result_summary ?? null),
+                  error: coldStart ? null : (event.error ?? null),
+                  error_code: coldStart ? null : (event.error_code ?? null),
+                  next_action: coldStart ? null : (event.next_action ?? null),
                   latency_ms: event.latency_ms,
                   freshness: buffered ?? tools[idx].freshness,
                 };
@@ -453,6 +481,7 @@ export function useChat(): UseChatReturn {
                   text: event.answer,
                   streamedText: event.answer,
                   structured,
+                  truncated: event.truncated ?? false,
                 };
               }),
             );
@@ -598,6 +627,10 @@ export function useChat(): UseChatReturn {
           plan: t.plan && t.plan.length > 0 ? t.plan : undefined,
           clarification: t.clarification ?? null,
           isClarificationTurn,
+          // Per-answer feedback: the run id keys submission, the saved rating
+          // (if any) restores the pressed 👍/👎 state on replay.
+          agentRunId: t.agent_run_id,
+          feedback: t.feedback ?? null,
           error:
             t.status === "failed"
               ? {

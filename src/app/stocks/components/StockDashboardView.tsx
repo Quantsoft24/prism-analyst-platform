@@ -17,9 +17,11 @@ import {
   type StockMetric,
   type StockRange,
 } from "@/lib/api/stocks";
+import { useRecentSecurities } from "@/hooks/useRecentSecurities";
 import { cn } from "@/lib/utils";
 
 import AnnualFinancials from "./AnnualFinancials";
+import MarketOverview from "./MarketOverview";
 import MetricDropdown from "./MetricDropdown";
 import LatestStrip from "./LatestStrip";
 import ReportsViewer from "./ReportsViewer";
@@ -48,6 +50,18 @@ export default function StockDashboardView({ onAsk }: StockDashboardViewProps) {
   const [selected, setSelected] = React.useState<Security | null>(null);
   const [metric, setMetric] = React.useState<StockMetric>("close");
   const [range, setRange] = React.useState<StockRange>("1M");
+  const recents = useRecentSecurities();
+
+  // Select a security AND record it in "recently viewed". Single entry point for
+  // the search box, the market-overview tiles, and the deep-link.
+  const recentsPush = recents.push;
+  const handleSelect = React.useCallback(
+    (s: Security) => {
+      setSelected(s);
+      recentsPush(s);
+    },
+    [recentsPush],
+  );
 
   // Deep-link: `/stocks?security=<security_id>` (e.g. clicking a holding in the
   // Portfolio Builder) pre-selects that security once its row is loaded. Read
@@ -60,10 +74,10 @@ export default function StockDashboardView({ onAsk }: StockDashboardViewProps) {
     if (!id || appliedDeepLink.current === id) return;
     const match = securities.data.find((s) => String(s.security_id) === id);
     if (match) {
-      setSelected(match);
+      handleSelect(match);
       appliedDeepLink.current = id;
     }
-  }, [securities.data]);
+  }, [securities.data, handleSelect]);
 
   const prices = useStockPrices(selected?.security_id ?? null, range);
   const points = prices.data?.points ?? [];
@@ -79,31 +93,25 @@ export default function StockDashboardView({ onAsk }: StockDashboardViewProps) {
     <div className={styles.page}>
       <header className={styles.pageHead}>
         <div>
+          {selected && (
+            <button className={styles.backBtn} onClick={() => setSelected(null)}>
+              ← Market overview
+            </button>
+          )}
           <h1 className={styles.pageTitle}>Stock Dashboard</h1>
           <p className={styles.pageSubtitle}>
-            Daily price history for {selected ? "this security" : "any NSE/BSE-listed company"} — OHLC,
-            volume, value &amp; market cap.
+            {selected
+              ? "Daily price history — OHLC, volume, value & market cap."
+              : "Indian markets at a glance — indices, top movers, and any NSE/BSE company."}
           </p>
         </div>
         <div className={styles.searchSlot}>
-          <SecuritySearch onSelect={setSelected} selectedId={selected?.security_id} />
+          <SecuritySearch onSelect={handleSelect} selectedId={selected?.security_id} />
         </div>
       </header>
 
       {!selected ? (
-        <div className={styles.empty}>
-          <div className={styles.emptyIcon}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M3 3v18h18" />
-              <path d="M7 14l4-4 3 3 5-6" />
-            </svg>
-          </div>
-          <div className={styles.emptyTitle}>Search for a company to begin</div>
-          <div className={styles.emptyText}>
-            Start typing a name, symbol, or ISIN. NSE and BSE listings appear separately —
-            pick the one you want.
-          </div>
-        </div>
+        <MarketOverview recent={recents.recent} onSelect={handleSelect} onAsk={onAsk} />
       ) : (
         <div className={styles.dashboard}>
           {/* Header card */}
