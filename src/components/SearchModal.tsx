@@ -156,7 +156,7 @@ export default function SearchModal({
           <input
             ref={inputRef}
             className={styles.input}
-            placeholder="Search or ask anything — type a question, view, or recent chat…"
+            placeholder="Ask PRISM, or jump to a page or recent chat…"
             value={query}
             onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
             onKeyDown={handleKeyDown}
