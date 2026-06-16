@@ -169,6 +169,19 @@ export interface FinalSection {
   kind: "summary" | "anomaly" | "note";
 }
 
+/** A curated "explore further" deep-dive action surfaced under an answer as a
+ *  compact chip that deep-links into a dedicated tool interface. Synthesized
+ *  server-side (rule-based, no LLM) — see backend ``src/services/deep_dive.py``.
+ *  The UI maps ``action`` → a route via ``ACTION_ROUTES`` (see DeepDiveActions);
+ *  unknown actions are dropped silently so new tools can ship registry-first. */
+export interface DeepDiveSuggestion {
+  action: "bmc" | "stock_dashboard" | "news" | "regulatory" | "portfolio";
+  label: string;
+  /** Lightweight deep-link params the target route supports (e.g. ``ticker``,
+   *  ``security_id``, ``company``). May be empty. */
+  context: Record<string, string | number>;
+}
+
 /**
  * Structured final-answer payload. Present on ``FinalEvent.structured`` when
  * the agent emitted the ``<answer_meta>{...}</answer_meta>`` block at the
@@ -187,6 +200,9 @@ export interface FinalAnswer {
   sections: FinalSection[];
   /** 2-3 suggested next questions — rendered as clickable chips. Optional. */
   suggestions?: string[];
+  /** "Explore further" deep-dive chips → tool interfaces. Optional; capped +
+   *  curated server-side. Rendered distinct from the follow-up chips. */
+  suggested_actions?: DeepDiveSuggestion[];
 }
 
 export interface FinalEvent {

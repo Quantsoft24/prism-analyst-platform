@@ -103,7 +103,7 @@ export default function Topbar({
           <circle cx="11" cy="11" r="8" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
-        <span className={styles.searchPlaceholder}>Search companies, reports...</span>
+        <span className={styles.searchPlaceholder}>Ask PRISM or jump to…</span>
         <span className={styles.searchKbd}>⌘K</span>
       </div>
 

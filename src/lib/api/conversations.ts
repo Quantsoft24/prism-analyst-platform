@@ -122,6 +122,9 @@ export const conversationsApi = {
     apiClient.post<void>(`/api/v1/chat/runs/${encodeURIComponent(agentRunId)}/feedback`, {
       body,
     }),
+  /** Remove a rating (toggle 👍/👎 back to neutral). */
+  clearFeedback: (agentRunId: string) =>
+    apiClient.delete<void>(`/api/v1/chat/runs/${encodeURIComponent(agentRunId)}/feedback`),
   /** Create (or get) a read-only public share link for a conversation. Owner
    *  only; idempotent — returns the existing link if already shared. */
   share: (sessionId: string) =>
@@ -237,6 +240,15 @@ export function useSubmitFeedback() {
       reasons?: string[];
       comment?: string | null;
     }) => conversationsApi.submitFeedback(agentRunId, { rating, reasons, comment }),
+  });
+}
+
+/** Remove a rating (toggle 👍/👎 back to neutral). Like `useSubmitFeedback`, the
+ *  footer owns the UI state — this just clears the persisted row. */
+export function useClearFeedback() {
+  return useMutation({
+    mutationFn: ({ agentRunId }: { agentRunId: string }) =>
+      conversationsApi.clearFeedback(agentRunId),
   });
 }
 

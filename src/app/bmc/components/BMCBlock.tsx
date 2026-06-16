@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { MessageCircle } from "lucide-react";
+// MessageCircle was used by the now-disabled "Ask about this block" footer.
+// import { MessageCircle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { BMCBlock as BMCBlockData, BMCEvidence } from "@/lib/api/bmc";
@@ -85,7 +86,7 @@ function confidenceClass(c: number): string {
   return styles.confNeg;
 }
 
-export default function BMCBlock({ block, companyName, onOpenPdf, onDrillDown, className }: BMCBlockProps) {
+export default function BMCBlock({ block, companyName, onOpenPdf, /* onDrillDown, */ className }: BMCBlockProps) {
   const isEmpty = block.status !== "ok" || block.summary_bullets.length === 0;
   const evidenceByMarker = React.useMemo(() => {
     const m = new Map<string, BMCEvidence>();
@@ -143,6 +144,10 @@ export default function BMCBlock({ block, companyName, onOpenPdf, onDrillDown, c
         )}
       </div>
 
+      {/* "Ask about this block" drill-down — DISABLED per request (hidden on all
+          9 nodes). The per-block chat panel still opens from the 3D Explorer.
+          To restore: uncomment this footer, the `MessageCircle` import, and
+          `onDrillDown` in the props destructure above.
       {block.evidence.length > 0 && (
         <footer className={styles.footer}>
           <button
@@ -156,6 +161,7 @@ export default function BMCBlock({ block, companyName, onOpenPdf, onDrillDown, c
           </button>
         </footer>
       )}
+      */}
     </section>
   );
 }

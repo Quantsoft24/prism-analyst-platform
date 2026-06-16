@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import {
+  SECTORS,
   timeAgoFrom,
   useNewsSources,
   useNewsTrending,
@@ -113,6 +114,24 @@ export default function NewsView({ onAsk }: NewsViewProps) {
     ro.observe(header);
     if (scroller) ro.observe(scroller);
     return () => ro.disconnect();
+  }, []);
+
+  // Deep-link seeding — a chat "News & sentiment" chip opens /news?company=…
+  // (and optionally &sector=…). Scope the feed on first mount. Reads
+  // window.location.search (matches the stocks/portfolio/regulatory views), so
+  // no Suspense boundary is needed; mount-only so it never fights the user's
+  // later filter changes.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search);
+    const company = p.get("company")?.trim();
+    const sec = p.get("sector")?.trim().toUpperCase();
+    if (company) setCompanyFilter(company);
+    if (sec && (SECTORS as readonly string[]).includes(sec)) {
+      setSector(sec as SectorCode);
+    }
+    // Mount-only: seed once from the entry URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const watchlist = useWatchlist();

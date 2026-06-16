@@ -224,6 +224,7 @@ function mkFinal(
       sections: structured.sections ?? [],
       citations: structured.citations ?? [],
       suggestions: structured.suggestions ?? [],
+      suggested_actions: structured.suggested_actions ?? [],
     },
     agent_run_id,
     cost_usd: 0,
@@ -303,6 +304,21 @@ function happyFinal(): FinalEvent {
         "How does TCS's margin compare with Infosys in FY24?",
         "What was TCS's deal TCV trend over the last 4 quarters?",
         "Show TCS revenue growth in a table",
+      ],
+      // Deep-dive "Explore" chips (mirrors what the backend's rule-based
+      // synthesis emits for a company financials/filings turn).
+      suggested_actions: [
+        { action: "bmc", label: "Business Model Canvas · TCS", context: { ticker: "TCS" } },
+        {
+          action: "stock_dashboard",
+          label: "Price & financials · TCS",
+          context: { security_id: 11536 },
+        },
+        {
+          action: "news",
+          label: "News & sentiment · TCS",
+          context: { company: "Tata Consultancy Services" },
+        },
       ],
     },
     "mock-run-happy",

@@ -15,6 +15,7 @@ import {
   downloadTextFile,
   slugifyFilename,
 } from "@/lib/chat/exportMarkdown";
+import { conversationDetailToPdf } from "@/lib/chat/exportPdf";
 import { useToast } from "./Toast";
 import { useDialog } from "./Dialog";
 import ShareModal from "./ShareModal";
@@ -88,6 +89,17 @@ function ShareIcon() {
   );
 }
 
+function PdfIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <path d="M9 15h6M9 18h6M9 12h2" />
+    </svg>
+  );
+}
+
 /**
  * Rename / delete actions for a conversation, each gated by a dialog (prompt /
  * danger-confirm) so a stray click never destroys or mangles a conversation.
@@ -125,6 +137,18 @@ export function useConversationActions() {
     [toast],
   );
 
+  const exportPdf = React.useCallback(
+    async (id: string, label: string) => {
+      try {
+        const detail = await conversationsApi.get(id);
+        conversationDetailToPdf(label, detail); // opens the print → Save-as-PDF dialog
+      } catch {
+        toast("Couldn't export that conversation.", "error");
+      }
+    },
+    [toast],
+  );
+
   const requestRename = React.useCallback(
     async (id: string, label: string) => {
       const name = await dialog.prompt({
@@ -151,7 +175,7 @@ export function useConversationActions() {
     [dialog, del],
   );
 
-  return { requestRename, requestDelete, togglePin, toggleArchive, exportMarkdown };
+  return { requestRename, requestDelete, togglePin, toggleArchive, exportMarkdown, exportPdf };
 }
 
 /**
@@ -174,28 +198,46 @@ export default function ConversationActionsMenu({
   archived?: boolean;
   buttonClassName?: string;
 }) {
-  const { requestRename, requestDelete, togglePin, toggleArchive, exportMarkdown } =
+  const { requestRename, requestDelete, togglePin, toggleArchive, exportMarkdown, exportPdf } =
     useConversationActions();
-  const [menu, setMenu] = React.useState<{ top: number; left: number } | null>(null);
+  const [open, setOpen] = React.useState(false);
+  const [pos, setPos] = React.useState<{ top: number; left: number } | null>(null);
   const [shareOpen, setShareOpen] = React.useState(false);
   const btnRef = React.useRef<HTMLButtonElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
   const toggleMenu = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (menu) {
-      setMenu(null);
+    setOpen((o) => !o);
+  };
+
+  // Position the menu AFTER it renders so we can measure its real size, then
+  // flip it ABOVE the button when there isn't room below (e.g. the last items
+  // in the sidebar) and clamp to the viewport edges. useLayoutEffect runs
+  // before paint, so there's no visible jump.
+  React.useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
       return;
     }
     const r = btnRef.current?.getBoundingClientRect();
-    if (!r) return;
-    // Right-align a ~172px menu under the button; clamp to the viewport edge.
-    setMenu({ top: r.bottom + 4, left: Math.max(8, r.right - 172) });
-  };
+    const el = menuRef.current;
+    if (!r || !el) return;
+    const h = el.offsetHeight;
+    const w = el.offsetWidth;
+    const gap = 4;
+    const margin = 8;
+    let top = r.bottom + gap;
+    if (top + h > window.innerHeight - margin) {
+      top = Math.max(margin, r.top - h - gap); // flip above the button
+    }
+    const left = Math.max(margin, Math.min(r.right - w, window.innerWidth - w - margin));
+    setPos({ top, left });
+  }, [open]);
 
   React.useEffect(() => {
-    if (!menu) return;
-    const close = () => setMenu(null);
+    if (!open) return;
+    const close = () => setOpen(false);
     // Outside-click by ref containment (NOT propagation): in the App Router
     // React's event root is `document`, so a child's stopPropagation can't block
     // this same-document listener — relying on it closed the menu before the
@@ -219,11 +261,11 @@ export default function ConversationActionsMenu({
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
     };
-  }, [menu]);
+  }, [open]);
 
   const runAction = (action: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
-    setMenu(null);
+    setOpen(false);
     action();
   };
 
@@ -233,21 +275,27 @@ export default function ConversationActionsMenu({
         ref={btnRef}
         type="button"
         className={cn(styles.menuBtn, buttonClassName)}
-        data-open={menu ? "true" : undefined}
+        data-open={open ? "true" : undefined}
         title="Conversation options"
         aria-label="Conversation options"
         aria-haspopup="menu"
-        aria-expanded={menu ? true : false}
+        aria-expanded={open ? true : false}
         onClick={toggleMenu}
       >
         <KebabIcon />
       </button>
-      {menu && (
+      {open && (
         <div
           ref={menuRef}
           className={styles.menu}
           role="menu"
-          style={{ top: menu.top, left: menu.left }}
+          // Until measured (useLayoutEffect), render off-screen + hidden so the
+          // first paint is already in the correct flipped/clamped position.
+          style={{
+            top: pos?.top ?? -9999,
+            left: pos?.left ?? -9999,
+            visibility: pos ? "visible" : "hidden",
+          }}
         >
           <button type="button" role="menuitem" className={styles.menuItem} onClick={runAction(() => togglePin(id, pinned))}>
             <PinIcon filled={pinned} />
@@ -259,7 +307,11 @@ export default function ConversationActionsMenu({
           </button>
           <button type="button" role="menuitem" className={styles.menuItem} onClick={runAction(() => void exportMarkdown(id, label))}>
             <ExportIcon />
-            Export (.md)
+            Export as Markdown
+          </button>
+          <button type="button" role="menuitem" className={styles.menuItem} onClick={runAction(() => void exportPdf(id, label))}>
+            <PdfIcon />
+            Export as PDF
           </button>
           <button type="button" role="menuitem" className={styles.menuItem} onClick={runAction(() => setShareOpen(true))}>
             <ShareIcon />

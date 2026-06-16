@@ -27,9 +27,15 @@ export default function ChatSessionPage() {
 
   React.useEffect(() => {
     if (!sessionId) return;
-    if (activeId === sessionId) return; // already open (resumed or just-created live run)
-    if (attempted.current === sessionId) return; // don't retry the same id on re-render
+    // Mark this id handled UP FRONT — before the already-open check — so that
+    // when "New Research" resets the chat (clearing `activeId` to null) while
+    // this route is still mounted, the resulting re-render does NOT reload the
+    // conversation we just left (which would bounce the user back to it via the
+    // URL-upgrade effect). Without this, a fresh chat never sets `attempted`
+    // (it hits the already-open early-return), so reset would re-load it.
+    if (attempted.current === sessionId) return;
     attempted.current = sessionId;
+    if (activeId === sessionId) return; // already open (resumed or just-created live run)
     void loadConversation(sessionId).catch(() =>
       toast("Couldn't open that conversation.", "error"),
     );

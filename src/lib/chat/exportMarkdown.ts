@@ -70,16 +70,17 @@ export function downloadTextFile(filename: string, content: string, mime = "text
 
 // ── Adapters ────────────────────────────────────────────────────────────────
 
-interface ExportableMessage {
+export interface ExportableMessage {
   role: "user" | "assistant";
   text?: string;
   streamedText?: string;
   structured?: FinalAnswer | null;
 }
 
-/** Live thread (ChatMessage[]) → Markdown. Walks the messages into Q/A turns;
- *  the assistant's prose comes from the structured answer when present. */
-export function messagesToMarkdown(title: string, messages: ExportableMessage[]): string {
+/** Live thread (ChatMessage[]) → Q/A turns. Walks the messages; the assistant's
+ *  prose comes from the structured answer when present. Shared by the Markdown
+ *  and PDF exporters. */
+export function messagesToTurns(messages: ExportableMessage[]): ExportTurn[] {
   const turns: ExportTurn[] = [];
   let pendingQuestion: string | null = null;
   for (const m of messages) {
@@ -93,15 +94,24 @@ export function messagesToMarkdown(title: string, messages: ExportableMessage[])
     }
   }
   if (pendingQuestion !== null) turns.push({ question: pendingQuestion, answer: null });
-  return buildConversationMarkdown(title, turns);
+  return turns;
 }
 
-/** Replayed conversation (ConversationDetail) → Markdown. */
-export function conversationDetailToMarkdown(title: string, detail: ConversationDetail): string {
-  const turns: ExportTurn[] = detail.turns.map((t) => ({
+/** Replayed conversation (ConversationDetail) → Q/A turns. */
+export function detailToTurns(detail: ConversationDetail): ExportTurn[] {
+  return detail.turns.map((t) => ({
     question: t.user_input,
     answer: t.structured?.text ?? t.final_answer,
     citations: t.structured?.citations,
   }));
-  return buildConversationMarkdown(title, turns);
+}
+
+/** Live thread (ChatMessage[]) → Markdown. */
+export function messagesToMarkdown(title: string, messages: ExportableMessage[]): string {
+  return buildConversationMarkdown(title, messagesToTurns(messages));
+}
+
+/** Replayed conversation (ConversationDetail) → Markdown. */
+export function conversationDetailToMarkdown(title: string, detail: ConversationDetail): string {
+  return buildConversationMarkdown(title, detailToTurns(detail));
 }
