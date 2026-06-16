@@ -1455,26 +1455,44 @@
   color: var(--ink);
 }
 
-/* Chat → BMC handoff card. */
-.bmcHandoff {
+/* "Explore further" deep-dive chips → tool interfaces (BMC / stock dashboard /
+   news / regulatory / portfolio). Distinct from the follow-up suggestion chips
+   above: icon-led, with an accent-tinted glyph. */
+.deepDive {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-top: 12px;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--accent);
-  border-radius: var(--radius-md);
-  background: var(--bg-elev);
-  color: var(--ink-soft);
-  text-decoration: none;
-  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
-.bmcHandoff:hover { border-color: var(--accent); background: var(--accent-soft); }
-.bmcHandoff svg { color: var(--accent); flex-shrink: 0; }
-.bmcHandoffText { flex: 1; font-size: 13px; }
-.bmcHandoffText strong { color: var(--ink); font-weight: 600; }
-.bmcHandoffArrow { font-size: 12.5px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+.deepDiveLabel {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.deepDiveChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--accent-deep);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color var(--transition-fast), background var(--transition-fast),
+    color var(--transition-fast);
+}
+.deepDiveChip svg { color: var(--accent); flex-shrink: 0; }
+.deepDiveChip:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
 .answerProse :global(blockquote) {
   margin: 0.6em 0;
   padding-left: 12px;
@@ -2305,6 +2323,52 @@
 .reportBtn:hover {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+/* ── Export dropdown (Markdown / PDF) ── */
+.exportWrap {
+  position: relative;
+  display: inline-flex;
+}
+.exportChevron {
+  margin-left: 1px;
+  transition: transform var(--transition-fast);
+}
+.exportChevronOpen {
+  transform: rotate(180deg);
+}
+.exportMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 168px;
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+.exportItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.exportItem:hover {
+  background: var(--bg-tint);
+  color: var(--accent);
 }
 
 /* ── Conversation column ── */

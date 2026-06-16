@@ -21,11 +21,14 @@ import {
   messagesToMarkdown,
   slugifyFilename,
 } from "@/lib/chat/exportMarkdown";
+import { messagesToPdf } from "@/lib/chat/exportPdf";
+import { stripAnswerMeta } from "@/lib/chat/answerMeta";
 import {
+  useClearFeedback,
   useSubmitFeedback,
   type MessageFeedback,
 } from "@/lib/api/conversations";
-import type { Citation } from "@/lib/api/chat";
+import type { Citation, DeepDiveSuggestion } from "@/lib/api/chat";
 import type {
   AgentThought,
   AssistantChart,
@@ -704,6 +707,7 @@ function FeedbackControls({
 }) {
   const { toast } = useToast();
   const submit = useSubmitFeedback();
+  const clear = useClearFeedback();
   const [rating, setRating] = useState<1 | -1 | null>(initial?.rating ?? null);
   const [reasons, setReasons] = useState<string[]>(initial?.reasons ?? []);
   const [comment, setComment] = useState(initial?.comment ?? "");
@@ -736,9 +740,25 @@ function FeedbackControls({
     );
   };
 
-  const onThumbUp = () => {
+  // Toggle a rating back to neutral (industry-standard: click the active thumb
+  // again to remove your rating). Clears the persisted row server-side.
+  const clearRating = () => {
+    setRating(null);
+    setReasons([]);
+    setComment("");
     setPickerOpen(false);
-    if (rating === 1) return; // already 👍 — no-op (no un-rate endpoint)
+    clear.mutate(
+      { agentRunId },
+      { onError: () => toast("Couldn't remove your feedback", "error") },
+    );
+  };
+
+  const onThumbUp = () => {
+    if (rating === 1) {
+      clearRating(); // un-like
+      return;
+    }
+    setPickerOpen(false);
     setRating(1);
     setReasons([]);
     setComment("");
@@ -746,12 +766,16 @@ function FeedbackControls({
   };
 
   const onThumbDown = () => {
-    if (rating !== -1) {
-      // Record the down-vote immediately; the reason detail is optional.
-      setRating(-1);
-      persist(-1, reasons, comment);
+    if (rating === -1) {
+      clearRating(); // un-dislike (and close the reason form)
+      return;
     }
-    setPickerOpen((o) => !o);
+    // Record the down-vote immediately; reasons/comment are optional detail.
+    setRating(-1);
+    setReasons([]);
+    setComment("");
+    persist(-1, [], "");
+    setPickerOpen(true); // open the reason form once (never toggles on re-click)
   };
 
   const toggleReason = (reason: string) =>
@@ -848,6 +872,84 @@ function FeedbackControls({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Deep-dive "Explore further" chips ──────────────────────────────────────
+ *  Compact chips that deep-link a chat answer into a dedicated tool interface.
+ *  The list is curated server-side (rule-based; see backend deep_dive.py); here
+ *  we just map each ``action`` → a route + icon via ACTION_ROUTES and seed the
+ *  lightweight context params the route already supports. Unknown actions are
+ *  dropped silently, so the backend can ship a new tool registry-first without
+ *  a frontend deploy. To add a tool: add ONE entry to ACTION_ROUTES. */
+
+const ACTION_ROUTES: Record<
+  DeepDiveSuggestion["action"],
+  { href: (ctx: Record<string, string | number>) => string; icon: React.ReactNode }
+> = {
+  bmc: {
+    href: (c) => (c.ticker ? `/bmc?ticker=${encodeURIComponent(String(c.ticker))}` : "/bmc"),
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" />
+      </svg>
+    ),
+  },
+  stock_dashboard: {
+    href: (c) =>
+      c.security_id != null
+        ? `/stocks?security=${encodeURIComponent(String(c.security_id))}`
+        : "/stocks",
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 3v18h18" /><path d="M7 15l4-4 3 3 5-6" />
+      </svg>
+    ),
+  },
+  news: {
+    href: (c) => (c.company ? `/news?company=${encodeURIComponent(String(c.company))}` : "/news"),
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M4 4h13v16H4zM17 8h3v10a2 2 0 0 1-2 2M8 8h5M8 12h5M8 16h3" />
+      </svg>
+    ),
+  },
+  regulatory: {
+    href: () => "/regulatory?view=library",
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z" />
+      </svg>
+    ),
+  },
+  portfolio: {
+    href: () => "/portfolio",
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      </svg>
+    ),
+  },
+};
+
+function DeepDiveActions({ actions }: { actions?: DeepDiveSuggestion[] }) {
+  // Drop any action we don't have a route for (graceful degradation — a newer
+  // backend may emit an action this client doesn't know yet).
+  const items = (actions ?? []).filter((a) => a.action in ACTION_ROUTES);
+  if (items.length === 0) return null;
+  return (
+    <div className={styles.deepDive}>
+      <span className={styles.deepDiveLabel}>Explore</span>
+      {items.map((a, i) => {
+        const def = ACTION_ROUTES[a.action];
+        return (
+          <Link key={`${a.action}-${i}`} href={def.href(a.context ?? {})} className={styles.deepDiveChip}>
+            {def.icon}
+            <span>{a.label}</span>
+          </Link>
+        );
+      })}
     </div>
   );
 }
@@ -1616,6 +1718,73 @@ function SourcesView({
   );
 }
 
+/* ── Export menu — Markdown or PDF (header dropdown). ───────────────────── */
+
+function ExportMenu({ title, messages }: { title: string; messages: ChatMessage[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  // Title from the first user message (falls back to the conversation title).
+  const exportTitle = messages.find((m) => m.role === "user")?.text ?? title;
+  const asMarkdown = () => {
+    downloadTextFile(`${slugifyFilename(exportTitle)}.md`, messagesToMarkdown(exportTitle, messages));
+    setOpen(false);
+  };
+  const asPdf = () => {
+    messagesToPdf(exportTitle, messages); // opens the browser print → Save as PDF
+    setOpen(false);
+  };
+
+  return (
+    <div className={styles.exportWrap} ref={ref}>
+      <button
+        type="button"
+        className={styles.reportBtn}
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Export this conversation"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+        Export
+        <svg className={cn(styles.exportChevron, open && styles.exportChevronOpen)} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <div className={styles.exportMenu} role="menu">
+          <button type="button" role="menuitem" className={styles.exportItem} onClick={asMarkdown}>
+            Markdown (.md)
+          </button>
+          <button type="button" role="menuitem" className={styles.exportItem} onClick={asPdf}>
+            PDF
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Main Component ────────────────────────────────────────────────────── */
 
 export default function ChatLayout({
@@ -1751,26 +1920,7 @@ export default function ChatLayout({
               </button>
             )}
             {!isRunning && messages.some((m) => m.role === "assistant") && (
-              <button
-                type="button"
-                className={styles.reportBtn}
-                onClick={() => {
-                  const exportTitle =
-                    messages.find((m) => m.role === "user")?.text ?? intentConfig.title;
-                  downloadTextFile(
-                    `${slugifyFilename(exportTitle)}.md`,
-                    messagesToMarkdown(exportTitle, messages),
-                  );
-                }}
-                title="Export this conversation as Markdown"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                Export
-              </button>
+              <ExportMenu title={intentConfig.title} messages={messages} />
             )}
             {!isRunning && runMeta.session_id && messages.some((m) => m.role === "assistant") && (
               <button
@@ -1828,6 +1978,11 @@ export default function ChatLayout({
             const thinkingActive = isLast && (phase === "thinking" || phase === "tools");
             const citations = msg.structured?.citations ?? [];
             const tools = msg.toolCalls ?? [];
+            const answerText = msg.streamedText || msg.text;
+            // While streaming, hide the trailing <answer_meta> block so the raw
+            // JSON never flashes before the final swap. Final/replayed text is
+            // already server-split, so this is a no-op there.
+            const displayText = streaming ? stripAnswerMeta(answerText) : answerText;
 
             return (
               <div key={mi} className={styles.msgAssistant}>
@@ -1854,7 +2009,7 @@ export default function ChatLayout({
                 {msg.showAnswer && (msg.streamedText || msg.text) && (
                   <>
                     <AnswerBlock
-                      text={msg.streamedText || msg.text}
+                      text={displayText}
                       citations={citations}
                       shimmer={streaming}
                       structured={msg.structured ?? null}
@@ -1911,39 +2066,14 @@ export default function ChatLayout({
                         </div>
                       )}
 
-                    {/* Chat → BMC handoff: if a bmc tool ran this turn, offer to
-                        open the full canvas (the 9-block grid needs more room than
-                        the chat pane). Ticker comes from the tool-call args. */}
-                    {!streaming &&
-                      (() => {
-                        const bmcTools = tools.filter(
-                          (t) => t.tool === "bmc_get" || t.tool === "bmc_generate",
-                        );
-                        const t = bmcTools.find((x) => x.args?.ticker)?.args?.ticker;
-                        if (!t || typeof t !== "string") return null;
-                        // A canvas exists when a bmc tool returned one (runner
-                        // summary "N-block canvas"); a cold-miss bmc_get reads
-                        // "no saved canvas yet". The STATE text reflects that, but
-                        // the ACTION is always "Open full canvas" — the card only
-                        // navigates to /bmc; if no canvas is saved the user builds
-                        // it there with the explicit Generate button.
-                        const hasCanvas = bmcTools.some((x) =>
-                          (x.result_summary ?? "").includes("-block canvas"),
-                        );
-                        return (
-                          <Link href={`/bmc?ticker=${encodeURIComponent(t)}`} className={styles.bmcHandoff}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <rect x="3" y="3" width="18" height="18" rx="2" />
-                              <path d="M3 9h18M9 21V9" />
-                            </svg>
-                            <span className={styles.bmcHandoffText}>
-                              <strong>Business Model Canvas</strong>
-                              {hasCanvas ? ` · ready for ${t}` : ` · not saved yet for ${t}`}
-                            </span>
-                            <span className={styles.bmcHandoffArrow}>Open full canvas →</span>
-                          </Link>
-                        );
-                      })()}
+                    {/* "Explore further" deep-dive chips — curated server-side
+                        (rule-based) handoffs into the tool UIs (BMC / stock
+                        dashboard / news / regulatory / portfolio). Distinct from
+                        the follow-up chips above; rendered per-answer (incl.
+                        replay) since each links to that answer's topic. */}
+                    {!streaming && (
+                      <DeepDiveActions actions={msg.structured?.suggested_actions} />
+                    )}
                   </>
                 )}
 
