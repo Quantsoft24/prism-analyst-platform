@@ -182,6 +182,28 @@ export interface DeepDiveSuggestion {
   context: Record<string, string | number>;
 }
 
+/** Structured numeric result from `financials_query` (prism-financials),
+ *  attached deterministically by the backend runner (not LLM-composed) so the
+ *  UI renders value-card / trend chart / comparison & ranking tables / statement
+ *  faithfully beneath the prose. Fields are operation-specific — all optional;
+ *  render by which array is populated (compare can carry `operation:"lookup"`). */
+export interface FinalFinancials {
+  operation: string;
+  answer?: string | null;
+  value?: number | null;
+  period?: string | null;
+  field?: { key?: string; label?: string; unit?: string } | null;
+  company?: { security_id?: number; name?: string; symbol?: string } | null;
+  series?: { period: string; value: number }[];
+  comparison?: { security_id?: number; name?: string; value?: number; period?: string }[];
+  ranking?: { rank?: number; name?: string; value?: number; display?: string; security_id?: number }[];
+  matches?: Record<string, unknown>[];
+  line_items?: { key?: string; label?: string; value?: number; unit?: string; display?: string }[];
+  attributes?: Record<string, unknown> | null;
+  count?: number | null;
+  names?: string[];
+}
+
 /**
  * Structured final-answer payload. Present on ``FinalEvent.structured`` when
  * the agent emitted the ``<answer_meta>{...}</answer_meta>`` block at the
@@ -203,6 +225,9 @@ export interface FinalAnswer {
   /** "Explore further" deep-dive chips → tool interfaces. Optional; capped +
    *  curated server-side. Rendered distinct from the follow-up chips. */
   suggested_actions?: DeepDiveSuggestion[];
+  /** Structured numeric result (from financials_query) — value card / chart /
+   *  tables rendered under the prose. Optional; absent on non-financials turns. */
+  financials?: FinalFinancials | null;
 }
 
 export interface FinalEvent {
