@@ -15,7 +15,7 @@ and the gotchas we've already hit so we don't hit them again.
 | Change a frontend `NEXT_PUBLIC_*` var | Edit `docker-compose.prod.yml` `frontend.build.args` block, commit, deploy through git (build-time inlined). |
 | Add a new third-party API key | Add to `.env` on EC2 + add the setting to `src/config.py` + push the config change through git. |
 | Rollback | `docker tag` of the previous image + `docker compose up -d <service>` on EC2 — see [Rollback](#rollback). |
-| Apply a database migration | Already automatic — backend deploy runs `alembic upgrade head` after the new image is up. |
+| Apply a database migration | Already automatic — backend deploy runs `python scripts/migrate_all_dbs.py` (migrates the primary **and** every `DATABASE_URL_FALLBACKS` DB) after the new image is up. |
 | Apply an emergency hotfix | Edit on EC2 + restart **and** push the same change through git in the same session — see [Hotfix protocol](#emergency-hotfix-protocol). |
 
 ---
@@ -303,9 +303,11 @@ alembic upgrade head  # test locally
 
 Commit the migration file. Push through the normal PR flow.
 
-**On deploy, the backend `deploy.yml` runs `alembic upgrade head`
-automatically** after the new container is up. You don't need to do
-anything. To verify on EC2:
+**On deploy, the backend `deploy.yml` runs `python scripts/migrate_all_dbs.py`
+automatically** after the new container is up — it applies `alembic upgrade head`
+to the primary DB and every `DATABASE_URL_FALLBACKS` DB, skipping any that are
+unreachable (e.g. a capped Neon project) and failing only if ALL are
+unreachable. You don't need to do anything. To verify on EC2:
 
 ```bash
 ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145 \
@@ -481,7 +483,9 @@ Both `deploy.yml` files do roughly the same thing:
 5. `docker compose up -d <service>` to recreate.
 6. `sleep` to let the container boot.
 7. `curl http://localhost:<port>/<healthcheck>` to verify.
-8. (Backend only) `docker compose exec backend alembic upgrade head`.
+8. (Backend only) `docker compose exec backend python scripts/migrate_all_dbs.py`
+   — migrates the primary + every `DATABASE_URL_FALLBACKS` DB; skips unreachable
+   ones, fails only if all are unreachable.
 9. `docker image prune -f` to free disk.
 
 **The `worker` shares the backend image.** `worker` has no `build:` of its own —
