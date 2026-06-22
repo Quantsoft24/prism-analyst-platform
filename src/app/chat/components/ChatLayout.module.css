@@ -2957,3 +2957,133 @@
     padding: 10px 16px;
   }
 }
+
+/* ── Financials structured render (financials_query → value card / bars / tables) ── */
+.finBlock {
+  margin: 12px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.finCaption {
+  padding: 8px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-mute);
+  background: var(--bg-tint);
+  border-bottom: 1px solid var(--line);
+}
+.finTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.finTable tr { border-bottom: 1px solid var(--line-soft); }
+.finTable tr:last-child { border-bottom: none; }
+.finTable td { padding: 8px 12px; vertical-align: top; }
+.finTableName { color: var(--ink-soft); }
+.finTableVal {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.finRank {
+  width: 28px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Trend — SVG line + area chart */
+.finChart { display: block; width: 100%; height: auto; padding: 12px 12px 4px; }
+.finChartArea { fill: var(--accent-soft); opacity: 0.55; }
+.finChartLine { fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.finChartDot { fill: var(--accent); stroke: var(--bg-elev); stroke-width: 1.5; }
+.finChartLabel { fill: var(--ink-mute); font-size: 11px; font-family: var(--font-body); }
+
+/* Ranking — horizontal bars (rank · name · bar · value) */
+.finBars { display: flex; flex-direction: column; gap: 7px; padding: 10px 12px; }
+.finRankRow { display: flex; align-items: center; gap: 9px; font-size: 12.5px; }
+.finRankName {
+  width: 150px;
+  flex-shrink: 0;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.finBarTrack {
+  flex: 1;
+  min-width: 40px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.finBarFill { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.finBarVal {
+  width: 104px;
+  flex-shrink: 0;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* Comparison — vertical bar chart */
+.finVBars {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  padding: 14px 14px 10px;
+}
+.finVBar { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+.finVBarVal { font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.finVBarTrack { width: 100%; max-width: 56px; height: 92px; display: flex; align-items: flex-end; }
+.finVBarFill { width: 100%; border-radius: 5px 5px 0 0; background: var(--accent); min-height: 3px; }
+.finVBarLabel {
+  width: 100%;
+  text-align: center;
+  font-size: 11px;
+  color: var(--ink-mute);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Single value card */
+.finValueCard { padding: 14px 16px; }
+.finValueLabel { font-size: 12px; color: var(--ink-mute); margin-bottom: 4px; }
+.finValueNum {
+  font-family: var(--font-display, inherit);
+  font-size: 24px;
+  font-weight: 650;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.finValuePeriod { margin-top: 3px; font-size: 11.5px; color: var(--ink-faint); }
+
+/* Charts tab — financials visuals from the conversation, each with its question */
+.wsChartsList { display: flex; flex-direction: column; gap: 18px; }
+.wsChartItem { display: flex; flex-direction: column; gap: 2px; }
+.wsChartQuestion {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  padding-bottom: 2px;
+}
+
+/* Radial gauge — single bounded % (margin / ROE / ratio) */
+.finGaugeWrap { display: flex; align-items: center; gap: 16px; padding: 14px 16px; }
+.finGauge { width: 84px; height: 84px; flex-shrink: 0; }
+.finGaugeTrack { fill: none; stroke: var(--bg-sunken); stroke-width: 9; }
+.finGaugeFill { fill: none; stroke: var(--accent); stroke-width: 9; stroke-linecap: round; transition: stroke-dashoffset var(--transition-normal, 0.4s) ease; }
+.finGaugeNum { fill: var(--ink); font-family: var(--font-mono); font-size: 18px; font-weight: 700; }
+.finGaugeMeta { min-width: 0; }
+
+@media (max-width: 560px) {
+  .finRankName { width: 90px; }
+  .finBarVal { width: 78px; }
+  .finVBars { gap: 8px; }
+}
