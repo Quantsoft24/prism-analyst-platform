@@ -28,7 +28,7 @@ import {
   useSubmitFeedback,
   type MessageFeedback,
 } from "@/lib/api/conversations";
-import type { Citation, DeepDiveSuggestion } from "@/lib/api/chat";
+import type { Citation, DeepDiveSuggestion, FinalFinancials } from "@/lib/api/chat";
 import type {
   AgentThought,
   AssistantChart,
@@ -393,7 +393,9 @@ function AnswerBlock({
   text: string;
   citations: Citation[];
   shimmer: boolean;
-  structured: { confidence?: "high" | "medium" | "low"; data_freshness?: string | null } | null;
+  structured:
+    | { confidence?: "high" | "medium" | "low"; data_freshness?: string | null; financials?: FinalFinancials | null }
+    | null;
 }) {
   const components = React.useMemo(
     () => makeMarkdownComponents(citations),
@@ -401,6 +403,7 @@ function AnswerBlock({
   );
 
   const freshness = structured?.data_freshness;
+  const financials = structured?.financials;
 
   return (
     <div className={styles.answerBlock}>
@@ -414,6 +417,9 @@ function AnswerBlock({
         </ReactMarkdown>
         {shimmer && <span className={styles.streamCursor} />}
       </div>
+      {/* Structured numeric result (financials_query) — value card / chart /
+          tables under the prose. Only when not shimmering (final answer). */}
+      {!shimmer && financials && <FinancialsBlock fin={financials} />}
       {freshness && (
         <div className={styles.answerFooter}>
           <div className={styles.answerChips}>
@@ -425,6 +431,256 @@ function AnswerBlock({
       )}
     </div>
   );
+}
+
+/** Format a financial number compactly — prefer the service's own `display`
+ *  string; else render the value with its unit (₹ cr / % / x). */
+function finNum(value: number | null | undefined, unit?: string | null): string {
+  if (value == null || Number.isNaN(value)) return "—";
+  const u = (unit ?? "").trim();
+  const n = Math.abs(value) >= 1000
+    ? value.toLocaleString("en-IN", { maximumFractionDigits: 0 })
+    : value.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  if (u === "%") return `${n}%`;
+  if (u.startsWith("₹")) return `₹${n}${u.slice(1) ? " " + u.slice(1) : ""}`;
+  return u ? `${n} ${u}` : n;
+}
+
+/** Tiny dependency-free SVG line+area chart for a financial trend (period→value).
+ *  Scales to its container (viewBox), token-themed via CSS classes. */
+function FinLineChart({ series }: { series: { period: string; value: number }[] }) {
+  const W = 580, H = 150, padX = 12, padT = 14, padB = 26;
+  const n = series.length;
+  const vals = series.map((s) => s.value ?? 0);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const span = max - min || Math.abs(max) || 1;
+  const x = (i: number) => (n <= 1 ? W / 2 : padX + (i / (n - 1)) * (W - 2 * padX));
+  const y = (v: number) => padT + (1 - (v - min) / span) * (H - padT - padB);
+  const base = H - padB;
+  const pts = series.map((s, i) => `${x(i).toFixed(1)},${y(s.value ?? 0).toFixed(1)}`);
+  const line = `M ${pts.join(" L ")}`;
+  const area = `M ${x(0).toFixed(1)},${base} L ${pts.join(" L ")} L ${x(n - 1).toFixed(1)},${base} Z`;
+  // For >8 points, label every other to avoid crowding.
+  const labelEvery = n > 8 ? 2 : 1;
+  return (
+    <svg className={styles.finChart} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Trend chart">
+      {n > 1 && <path className={styles.finChartArea} d={area} />}
+      {n > 1 && <path className={styles.finChartLine} d={line} />}
+      {series.map((s, i) => (
+        <circle key={`d${i}`} className={styles.finChartDot} cx={x(i)} cy={y(s.value ?? 0)} r={3.2} />
+      ))}
+      {series.map((s, i) => {
+        // Always label the first + last point; thin the middle when crowded.
+        if (i !== 0 && i !== n - 1 && i % labelEvery !== 0) return null;
+        // Anchor edges inward so they don't clip the SVG viewport.
+        const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
+        return (
+          <text key={`t${i}`} className={styles.finChartLabel} x={x(i)} y={H - 9} textAnchor={anchor}>
+            {s.period}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** Deterministic structured render of a `financials_query` result — value card,
+ *  trend line-chart, comparison/ranking bar-charts, or a statement table. Renders
+ *  by which array is populated (compare can carry `operation:"lookup"`), NOT the
+ *  op label. The agent's prose answer stays above; this is the auditable data. */
+/** Compact value for a bar label — prefer the service's display but drop the
+ *  long "(₹X lakh cr)" parenthetical so it fits the bar's value column. */
+function finBarValue(d: { value: number; display?: string }, unit?: string | null): string {
+  if (d.display) return d.display.split(" (")[0].trim();
+  return finNum(d.value, unit);
+}
+
+/** Vertical bars — for comparing a FEW short-labelled categories on one metric.
+ *  Sign-aware fill (negative → neg color). */
+function FinVBars({ items, unit }: { items: { label: string; value: number; display?: string }[]; unit?: string | null }) {
+  const max = Math.max(...items.map((d) => Math.abs(d.value || 0)), 1);
+  return (
+    <div className={styles.finVBars}>
+      {items.map((d, i) => (
+        <div key={i} className={styles.finVBar}>
+          <span className={styles.finVBarVal}>{finBarValue(d, unit)}</span>
+          <span className={styles.finVBarTrack}>
+            <span
+              className={styles.finVBarFill}
+              style={{
+                height: `${Math.max(3, (Math.abs(d.value || 0) / max) * 100)}%`,
+                background: d.value < 0 ? "var(--neg)" : "var(--accent)",
+              }}
+            />
+          </span>
+          <span className={styles.finVBarLabel} title={d.label}>{d.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Horizontal bars — for rankings (sorted) or MANY / long-named categories.
+ *  Optional rank index. Sign-aware fill. */
+function FinHBars({
+  items, unit, ranked,
+}: { items: { label: string; value: number; display?: string; rank?: number }[]; unit?: string | null; ranked?: boolean }) {
+  const max = Math.max(...items.map((d) => Math.abs(d.value || 0)), 1);
+  return (
+    <div className={styles.finBars}>
+      {items.map((d, i) => (
+        <div key={i} className={styles.finRankRow}>
+          {ranked && <span className={styles.finRank}>{d.rank ?? i + 1}</span>}
+          <span className={styles.finRankName} title={d.label}>{d.label}</span>
+          <span className={styles.finBarTrack}>
+            <span
+              className={styles.finBarFill}
+              style={{
+                width: `${Math.max(3, (Math.abs(d.value || 0) / max) * 100)}%`,
+                background: d.value < 0 ? "var(--neg)" : "var(--accent)",
+              }}
+            />
+          </span>
+          <span className={styles.finBarVal}>{finBarValue(d, unit)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Radial gauge — for a single bounded percentage (margin / ROE / ratio %). */
+function FinGauge({ value, label, sub }: { value: number; label: string; sub?: string | null }) {
+  const pct = Math.max(0, Math.min(100, value));
+  const r = 34;
+  const circ = 2 * Math.PI * r;
+  return (
+    <div className={styles.finGaugeWrap}>
+      <svg className={styles.finGauge} viewBox="0 0 90 90" role="img" aria-label={`${label} gauge`}>
+        <circle className={styles.finGaugeTrack} cx="45" cy="45" r={r} />
+        <circle
+          className={styles.finGaugeFill}
+          cx="45" cy="45" r={r}
+          strokeDasharray={circ}
+          strokeDashoffset={circ * (1 - pct / 100)}
+          transform="rotate(-90 45 45)"
+        />
+        <text className={styles.finGaugeNum} x="45" y="49" textAnchor="middle">{finNum(value, "%")}</text>
+      </svg>
+      <div className={styles.finGaugeMeta}>
+        <div className={styles.finValueLabel}>{label}</div>
+        {sub && <div className={styles.finValuePeriod}>{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** Does this financials result render as an actual CHART (vs a value card /
+ *  statement table)? Used to decide what surfaces in the workspace Charts tab. */
+function isFinChart(fin: FinalFinancials): boolean {
+  return (
+    (fin.series?.length ?? 0) > 0 ||
+    (fin.comparison?.length ?? 0) > 0 ||
+    (fin.ranking?.length ?? 0) > 0 ||
+    (fin.value != null && fin.field?.unit === "%")
+  );
+}
+
+function FinancialsBlock({ fin }: { fin: FinalFinancials }) {
+  const unit = fin.field?.unit ?? null;
+
+  // 1) TIME SERIES → a LINE chart (≥3 points) or vertical bars (2 points).
+  //    Time-ordered data reads best as a line; 2 points aren't a line.
+  if (fin.series && fin.series.length > 0) {
+    const cap = `${fin.field?.label ?? "Trend"}${fin.company?.name ? ` · ${fin.company.name}` : ""}`;
+    const long = fin.series.length >= 3;
+    return (
+      <div className={styles.finBlock}>
+        <div className={styles.finCaption}>{cap}</div>
+        {long ? (
+          <FinLineChart series={fin.series} />
+        ) : (
+          <FinVBars items={fin.series.map((s) => ({ label: s.period, value: s.value }))} unit={unit} />
+        )}
+        {long && (
+          <table className={styles.finTable}><tbody>
+            {fin.series.map((s, i) => (
+              <tr key={i}>
+                <td className={styles.finTableName}>{s.period}</td>
+                <td className={styles.finTableVal}>{finNum(s.value, unit)}</td>
+              </tr>
+            ))}
+          </tbody></table>
+        )}
+      </div>
+    );
+  }
+
+  // 2) CATEGORICAL (comparison / ranking) → a BAR chart. Orientation chosen from
+  //    the data: rankings (sorted) and many/long-named sets go HORIZONTAL; a few
+  //    short-labelled companies go VERTICAL.
+  const ranked = !!(fin.ranking && fin.ranking.length);
+  const cat = ranked
+    ? fin.ranking!.map((r) => ({ label: r.name ?? "", value: r.value ?? 0, display: r.display, rank: r.rank }))
+    : fin.comparison && fin.comparison.length
+      ? fin.comparison.map((r) => ({ label: r.name ?? "", value: r.value ?? 0 }))
+      : null;
+  if (cat && cat.length) {
+    const longest = Math.max(...cat.map((d) => d.label.length), 0);
+    const horizontal = ranked || cat.length > 6 || longest > 12;
+    return (
+      <div className={styles.finBlock}>
+        <div className={styles.finCaption}>
+          {ranked
+            ? fin.field?.label ?? "Ranking"
+            : `${fin.field?.label ?? "Comparison"}${fin.comparison?.[0]?.period ? ` · ${fin.comparison[0].period}` : ""}`}
+        </div>
+        {horizontal ? <FinHBars items={cat} unit={unit} ranked={ranked} /> : <FinVBars items={cat} unit={unit} />}
+      </div>
+    );
+  }
+
+  // 3) STATEMENT → line-item table (balance sheet / P&L).
+  if (fin.line_items && fin.line_items.length > 0) {
+    return (
+      <div className={styles.finBlock}>
+        <div className={styles.finCaption}>
+          {fin.company?.name ? `${fin.company.name} — ` : ""}Statement{fin.period ? ` · ${fin.period}` : ""}
+        </div>
+        <table className={styles.finTable}><tbody>
+          {fin.line_items.map((li, i) => (
+            <tr key={i}>
+              <td className={styles.finTableName}>{li.label ?? li.key}</td>
+              <td className={styles.finTableVal}>{li.display ?? finNum(li.value, li.unit ?? unit)}</td>
+            </tr>
+          ))}
+        </tbody></table>
+      </div>
+    );
+  }
+
+  // 4) SINGLE VALUE → a GAUGE for a bounded percentage (margin/ROE/ratio %),
+  //    otherwise a value card.
+  if (fin.value != null) {
+    const label = `${fin.field?.label ?? "Value"}${fin.company?.name ? ` · ${fin.company.name}` : ""}`;
+    if (unit === "%" && fin.value >= 0 && fin.value <= 100) {
+      return (
+        <div className={styles.finBlock}>
+          <FinGauge value={fin.value} label={label} sub={fin.period} />
+        </div>
+      );
+    }
+    return (
+      <div className={styles.finBlock}>
+        <div className={styles.finValueCard}>
+          <div className={styles.finValueLabel}>{label}</div>
+          <div className={styles.finValueNum}>{finNum(fin.value, unit)}</div>
+          {fin.period && <div className={styles.finValuePeriod}>{fin.period}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 /* ── Format helpers ────────────────────────────────────────────────────── */
@@ -1218,7 +1474,17 @@ function WorkspacePane({ messages, intentConfig, runMeta }: WorkspacePaneProps) 
   const allTools = messages.flatMap((m) => m.toolCalls ?? []);
   const doneTools = allTools.filter((t) => t.status === "done");
   const errorTools = allTools.filter((t) => t.status === "error");
-  const citations = lastAssistant?.structured?.citations ?? [];
+  // Aggregate sources across the WHOLE conversation (consistent with Tools /
+  // Charts), deduped — so the Sources tab isn't limited to the last answer.
+  const seenCite = new Set<string>();
+  const citations = messages
+    .flatMap((m) => m.structured?.citations ?? [])
+    .filter((c) => {
+      const k = `${c.url ?? ""}|${c.page ?? ""}|${c.label ?? ""}`;
+      if (seenCite.has(k)) return false;
+      seenCite.add(k);
+      return true;
+    });
   const kpis = allTools
     .map(tryExtractKpi)
     .filter((k): k is { label: string; value: string; unit: string } => k !== null);
@@ -1239,9 +1505,26 @@ function WorkspacePane({ messages, intentConfig, runMeta }: WorkspacePaneProps) 
   // Charts surfaced on this turn (across all assistant messages)
   const allCharts = messages.flatMap((m) => m.charts ?? []);
 
+  // Financials visuals from the conversation → also surface in the Charts tab,
+  // each paired with the question that produced it (the nearest preceding user
+  // message). This links the inline answers to the workspace Charts tab.
+  const finCharts = messages
+    .map((m, i) => {
+      const fin = m.role === "assistant" ? m.structured?.financials : null;
+      if (!fin || !isFinChart(fin)) return null;
+      let q = "";
+      for (let j = i - 1; j >= 0; j--) {
+        if (messages[j].role === "user") { q = messages[j].text; break; }
+      }
+      return { key: m.agentRunId ?? `fin-${i}`, title: q || fin.field?.label || "Financials", fin };
+    })
+    .filter((x): x is { key: string; title: string; fin: FinalFinancials } => x !== null);
+
+  const chartsCount = allCharts.length + finCharts.length;
+
   const tabs: { id: WorkspaceTab; label: string; count?: number }[] = [
     { id: "report", label: "Report" },
-    { id: "charts", label: "Charts", count: allCharts.length },
+    { id: "charts", label: "Charts", count: chartsCount },
     { id: "tools", label: "Tools", count: allTools.length },
     { id: "sources", label: "Sources", count: citations.length },
   ];
@@ -1283,7 +1566,7 @@ function WorkspacePane({ messages, intentConfig, runMeta }: WorkspacePaneProps) 
             }}
           />
         )}
-        {activeTab === "charts" && <ChartsView charts={allCharts} />}
+        {activeTab === "charts" && <ChartsView charts={allCharts} financials={finCharts} />}
         {activeTab === "tools" && <ToolsView tools={allTools} />}
         {activeTab === "sources" && (
           <SourcesView citations={citations} tools={allTools} />
@@ -1382,6 +1665,9 @@ function ReportView({
             ))}
           </div>
         )}
+
+        {/* Structured financials (chart / table) for this answer. */}
+        {structured?.financials && <FinancialsBlock fin={structured.financials} />}
 
         {/* Named sections from FinalAnswer.sections — Executive summary,
             Anomaly flags, etc. Anomaly callouts get the warn accent. */}
@@ -1501,21 +1787,39 @@ function WorkspaceToolRow({ tool }: { tool: ToolCallState }) {
 /** Sources tab — numbered citations from the structured final answer +
  *  any data-bearing tool calls that yielded a freshness signal. */
 /** Charts tab — one card per ChartEvent, hand-rolled SVG to keep deps light. */
-function ChartsView({ charts }: { charts: AssistantChart[] }) {
-  if (charts.length === 0) {
+function ChartsView({
+  charts,
+  financials = [],
+}: {
+  charts: AssistantChart[];
+  financials?: { key: string; title: string; fin: FinalFinancials }[];
+}) {
+  if (charts.length === 0 && financials.length === 0) {
     return (
       <div className={styles.wsEmptyState}>
-        No charts yet. Charts surface when a tool returns a series (price
-        trend, KPI band, etc.). Real tools don&apos;t emit these today — the
-        mock-mode happy path does, to validate the rendering pipeline.
+        No charts yet. Charts surface when an answer returns a series, comparison,
+        ranking, or ratio — ask a financial question (e.g. &quot;Infosys EPS over
+        5 years&quot; or &quot;top 10 IT companies by revenue&quot;).
       </div>
     );
   }
   return (
-    <div className={styles.chartsGrid}>
-      {charts.map((c) => (
-        <ChartCard key={c.chart_id} chart={c} />
+    <div className={styles.wsChartsList}>
+      {/* Financials visuals from the conversation, newest interactions last. */}
+      {financials.map((f) => (
+        <div key={f.key} className={styles.wsChartItem}>
+          <div className={styles.wsChartQuestion}>{f.title}</div>
+          <FinancialsBlock fin={f.fin} />
+        </div>
       ))}
+      {/* Legacy tool-emitted line/area charts (AssistantChart). */}
+      {charts.length > 0 && (
+        <div className={styles.chartsGrid}>
+          {charts.map((c) => (
+            <ChartCard key={c.chart_id} chart={c} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
