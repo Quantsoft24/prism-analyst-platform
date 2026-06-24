@@ -2,9 +2,13 @@
 
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 import { cn } from "@/lib/utils";
 import { type IntentConfig, type IntentType } from "@/lib/mockData";
@@ -28,7 +32,8 @@ import {
   useSubmitFeedback,
   type MessageFeedback,
 } from "@/lib/api/conversations";
-import type { Citation, DeepDiveSuggestion, FinalFinancials } from "@/lib/api/chat";
+import type { Citation, DeepDiveSuggestion, FinalFinancials, Visual } from "@/lib/api/chat";
+import { downloadFile, downloadSvg, financialsToCsv, slugify, visualToCsv } from "@/lib/chat/chartExport";
 import type {
   AgentThought,
   AssistantChart,
@@ -210,6 +215,36 @@ function FilingCiteMarker({
   );
 }
 
+/** Escape the `|` INSIDE citation markers (`[Co | p.N]` → `[Co \| p.N]`) before
+ *  markdown parsing, so the pipe isn't read as a GFM table-column separator (it
+ *  was splitting filing tables). GFM renders `\|` back to a literal `|`, so the
+ *  citation text node is unchanged and still deep-links. No-op outside citations. */
+function escapeCitationPipes(md: string): string {
+  return md.replace(/\[([^\][|]+)\|([^\]]*p\.\s*\d[^\]]*)\]/g, "[$1\\|$2]");
+}
+
+/** Format a data-freshness string: a raw ISO timestamp → a clean date; keep
+ *  "live", "FY2025", "Q4 FY24" etc. as-is. */
+function formatFreshness(s: string): string {
+  const t = (s ?? "").trim();
+  if (!t || /^(live|fy|q[1-4]|h[12])/i.test(t)) return t;
+  const m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+    }
+  }
+  return t;
+}
+
+/** Strip an internal `security_id` from displayed text (e.g. a clarification pick
+ *  "Reliance Power Ltd. — security_id 2230" → "Reliance Power Ltd."). Display-only;
+ *  the underlying message keeps the id for the backend. */
+function stripSecId(text: string): string {
+  return (text ?? "").replace(/\s*[—–-]?\s*security[ _]?id\s*[:#]?\s*\d+/gi, "").trim();
+}
+
 /** Split a text run on citation markers — numeric `[n]` and inline
  *  `[Company | p.N]` (incl. multi-page `[Company | p.5, p.10]`) — render each
  *  clickable. */
@@ -377,6 +412,17 @@ function makeMarkdownComponents(citations: Citation[]) {
         {children}
       </a>
     ),
+    // Blockquotes render as a left-accent callout (notes / caveats).
+    blockquote: ({ children }: MdProps) => (
+      <blockquote className={styles.mdQuote}>{children}</blockquote>
+    ),
+    // Wide tables (balance sheets, comparisons) get a horizontal scroll + sticky
+    // header so they never overflow the chat column.
+    table: ({ children }: MdProps) => (
+      <div className={styles.mdTableWrap}>
+        <table>{children}</table>
+      </div>
+    ),
     // Fenced code → highlighted block with a language label + Copy button.
     pre: CodeBlock,
   };
@@ -394,7 +440,7 @@ function AnswerBlock({
   citations: Citation[];
   shimmer: boolean;
   structured:
-    | { confidence?: "high" | "medium" | "low"; data_freshness?: string | null; financials?: FinalFinancials | null }
+    | { confidence?: "high" | "medium" | "low"; data_freshness?: string | null; financials?: FinalFinancials | null; visuals?: Visual[] | null }
     | null;
 }) {
   const components = React.useMemo(
@@ -404,27 +450,31 @@ function AnswerBlock({
 
   const freshness = structured?.data_freshness;
   const financials = structured?.financials;
+  const visuals = structured?.visuals;
 
   return (
     <div className={styles.answerBlock}>
       <div className={cn(styles.msgBodyText, styles.answerProse)}>
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
+          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }], rehypeKatex]}
           components={components}
         >
-          {text}
+          {escapeCitationPipes(text)}
         </ReactMarkdown>
         {shimmer && <span className={styles.streamCursor} />}
       </div>
       {/* Structured numeric result (financials_query) — value card / chart /
           tables under the prose. Only when not shimmering (final answer). */}
       {!shimmer && financials && <FinancialsBlock fin={financials} />}
+      {/* Universal visuals (technicals / news / future tools) — rendered by a
+          generic kind-switch renderer. Additive: nothing when no visuals. */}
+      {!shimmer && visuals && visuals.length > 0 && <VisualsBlock visuals={visuals} />}
       {freshness && (
         <div className={styles.answerFooter}>
           <div className={styles.answerChips}>
             <span className={styles.freshnessChip} title="Earliest source date">
-              as of {freshness}
+              as of {formatFreshness(freshness)}
             </span>
           </div>
         </div>
@@ -438,7 +488,9 @@ function AnswerBlock({
 function finNum(value: number | null | undefined, unit?: string | null): string {
   if (value == null || Number.isNaN(value)) return "—";
   const u = (unit ?? "").trim();
-  const n = Math.abs(value) >= 1000
+  // Share prices (unit exactly "₹") keep paise even ≥1000; crore figures round.
+  const isSharePrice = u === "₹";
+  const n = Math.abs(value) >= 1000 && !isSharePrice
     ? value.toLocaleString("en-IN", { maximumFractionDigits: 0 })
     : value.toLocaleString("en-IN", { maximumFractionDigits: 2 });
   if (u === "%") return `${n}%`;
@@ -446,133 +498,13 @@ function finNum(value: number | null | undefined, unit?: string | null): string 
   return u ? `${n} ${u}` : n;
 }
 
-/** Tiny dependency-free SVG line+area chart for a financial trend (period→value).
- *  Scales to its container (viewBox), token-themed via CSS classes. */
-function FinLineChart({ series }: { series: { period: string; value: number }[] }) {
-  const W = 580, H = 150, padX = 12, padT = 14, padB = 26;
-  const n = series.length;
-  const vals = series.map((s) => s.value ?? 0);
-  const min = Math.min(...vals), max = Math.max(...vals);
-  const span = max - min || Math.abs(max) || 1;
-  const x = (i: number) => (n <= 1 ? W / 2 : padX + (i / (n - 1)) * (W - 2 * padX));
-  const y = (v: number) => padT + (1 - (v - min) / span) * (H - padT - padB);
-  const base = H - padB;
-  const pts = series.map((s, i) => `${x(i).toFixed(1)},${y(s.value ?? 0).toFixed(1)}`);
-  const line = `M ${pts.join(" L ")}`;
-  const area = `M ${x(0).toFixed(1)},${base} L ${pts.join(" L ")} L ${x(n - 1).toFixed(1)},${base} Z`;
-  // For >8 points, label every other to avoid crowding.
-  const labelEvery = n > 8 ? 2 : 1;
-  return (
-    <svg className={styles.finChart} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Trend chart">
-      {n > 1 && <path className={styles.finChartArea} d={area} />}
-      {n > 1 && <path className={styles.finChartLine} d={line} />}
-      {series.map((s, i) => (
-        <circle key={`d${i}`} className={styles.finChartDot} cx={x(i)} cy={y(s.value ?? 0)} r={3.2} />
-      ))}
-      {series.map((s, i) => {
-        // Always label the first + last point; thin the middle when crowded.
-        if (i !== 0 && i !== n - 1 && i % labelEvery !== 0) return null;
-        // Anchor edges inward so they don't clip the SVG viewport.
-        const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
-        return (
-          <text key={`t${i}`} className={styles.finChartLabel} x={x(i)} y={H - 9} textAnchor={anchor}>
-            {s.period}
-          </text>
-        );
-      })}
-    </svg>
-  );
-}
-
-/** Deterministic structured render of a `financials_query` result — value card,
- *  trend line-chart, comparison/ranking bar-charts, or a statement table. Renders
- *  by which array is populated (compare can carry `operation:"lookup"`), NOT the
- *  op label. The agent's prose answer stays above; this is the auditable data. */
-/** Compact value for a bar label — prefer the service's display but drop the
- *  long "(₹X lakh cr)" parenthetical so it fits the bar's value column. */
-function finBarValue(d: { value: number; display?: string }, unit?: string | null): string {
-  if (d.display) return d.display.split(" (")[0].trim();
-  return finNum(d.value, unit);
-}
-
-/** Vertical bars — for comparing a FEW short-labelled categories on one metric.
- *  Sign-aware fill (negative → neg color). */
-function FinVBars({ items, unit }: { items: { label: string; value: number; display?: string }[]; unit?: string | null }) {
-  const max = Math.max(...items.map((d) => Math.abs(d.value || 0)), 1);
-  return (
-    <div className={styles.finVBars}>
-      {items.map((d, i) => (
-        <div key={i} className={styles.finVBar}>
-          <span className={styles.finVBarVal}>{finBarValue(d, unit)}</span>
-          <span className={styles.finVBarTrack}>
-            <span
-              className={styles.finVBarFill}
-              style={{
-                height: `${Math.max(3, (Math.abs(d.value || 0) / max) * 100)}%`,
-                background: d.value < 0 ? "var(--neg)" : "var(--accent)",
-              }}
-            />
-          </span>
-          <span className={styles.finVBarLabel} title={d.label}>{d.label}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Horizontal bars — for rankings (sorted) or MANY / long-named categories.
- *  Optional rank index. Sign-aware fill. */
-function FinHBars({
-  items, unit, ranked,
-}: { items: { label: string; value: number; display?: string; rank?: number }[]; unit?: string | null; ranked?: boolean }) {
-  const max = Math.max(...items.map((d) => Math.abs(d.value || 0)), 1);
-  return (
-    <div className={styles.finBars}>
-      {items.map((d, i) => (
-        <div key={i} className={styles.finRankRow}>
-          {ranked && <span className={styles.finRank}>{d.rank ?? i + 1}</span>}
-          <span className={styles.finRankName} title={d.label}>{d.label}</span>
-          <span className={styles.finBarTrack}>
-            <span
-              className={styles.finBarFill}
-              style={{
-                width: `${Math.max(3, (Math.abs(d.value || 0) / max) * 100)}%`,
-                background: d.value < 0 ? "var(--neg)" : "var(--accent)",
-              }}
-            />
-          </span>
-          <span className={styles.finBarVal}>{finBarValue(d, unit)}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Radial gauge — for a single bounded percentage (margin / ROE / ratio %). */
-function FinGauge({ value, label, sub }: { value: number; label: string; sub?: string | null }) {
-  const pct = Math.max(0, Math.min(100, value));
-  const r = 34;
-  const circ = 2 * Math.PI * r;
-  return (
-    <div className={styles.finGaugeWrap}>
-      <svg className={styles.finGauge} viewBox="0 0 90 90" role="img" aria-label={`${label} gauge`}>
-        <circle className={styles.finGaugeTrack} cx="45" cy="45" r={r} />
-        <circle
-          className={styles.finGaugeFill}
-          cx="45" cy="45" r={r}
-          strokeDasharray={circ}
-          strokeDashoffset={circ * (1 - pct / 100)}
-          transform="rotate(-90 45 45)"
-        />
-        <text className={styles.finGaugeNum} x="45" y="49" textAnchor="middle">{finNum(value, "%")}</text>
-      </svg>
-      <div className={styles.finGaugeMeta}>
-        <div className={styles.finValueLabel}>{label}</div>
-        {sub && <div className={styles.finValuePeriod}>{sub}</div>}
-      </div>
-    </div>
-  );
-}
+/** Interactive financials charts (recharts) — hover tooltips, animation,
+ *  responsive, theme-token colors. Client-only + code-split so recharts stays
+ *  out of the server bundle and off non-chart routes. */
+const FinChart = dynamic(() => import("./FinancialsCharts"), {
+  ssr: false,
+  loading: () => <div className={styles.finChartLoading} aria-hidden />,
+});
 
 /** Does this financials result render as an actual CHART (vs a value card /
  *  statement table)? Used to decide what surfaces in the workspace Charts tab. */
@@ -585,31 +517,75 @@ function isFinChart(fin: FinalFinancials): boolean {
   );
 }
 
+/** UNIVERSAL visual renderer — one generic kind-switch for visuals produced by
+ *  ANY tool (technicals, news, …, and future tools), reusing the same recharts
+ *  primitives as financials. Add a tool that emits a recognised shape → it
+ *  renders here with zero new UI code. */
+function VisualOne({ v }: { v: Visual }) {
+  const cap = v.title ? <div className={styles.finCaption}>{v.title}</div> : null;
+
+  if (v.kind === "kpi") {
+    const items = v.kpis ?? [];
+    if (!items.length) return null;
+    return (
+      <div className={styles.finBlock}>
+        {cap}
+        <div className={styles.visKpis}>
+          {items.map((k, i) => (
+            <div key={i} className={styles.visKpi}>
+              <div className={styles.visKpiLabel}>{k.label}</div>
+              <div className={styles.visKpiValue}>{finNum(k.value, k.unit)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (v.kind === "gauge" && v.value != null) {
+    return <div className={styles.finBlock}>{cap}<FinChart kind="gauge" value={v.value} /></div>;
+  }
+
+  const series = v.series ?? [];
+  if (!series.length) return null;
+
+  if (v.kind === "line" || v.kind === "area") {
+    return (
+      <div className={styles.finBlock}>
+        {cap}
+        <FinChart kind="trend" series={series.map((p) => ({ period: p.label, value: p.value }))} unit={v.unit ?? null} />
+      </div>
+    );
+  }
+
+  // bar (default)
+  return (
+    <div className={styles.finBlock}>
+      {cap}
+      <FinChart kind="bars" items={series} unit={v.unit ?? null} horizontal={v.orientation === "horizontal"} />
+    </div>
+  );
+}
+
+function VisualsBlock({ visuals }: { visuals: Visual[] }) {
+  if (!visuals?.length) return null;
+  return <>{visuals.map((v, i) => <VisualOne key={i} v={v} />)}</>;
+}
+
 function FinancialsBlock({ fin }: { fin: FinalFinancials }) {
   const unit = fin.field?.unit ?? null;
 
-  // 1) TIME SERIES → a LINE chart (≥3 points) or vertical bars (2 points).
+  // 1) TIME SERIES → a LINE chart (≥3 points) or a bar chart (2 points).
   //    Time-ordered data reads best as a line; 2 points aren't a line.
   if (fin.series && fin.series.length > 0) {
     const cap = `${fin.field?.label ?? "Trend"}${fin.company?.name ? ` · ${fin.company.name}` : ""}`;
-    const long = fin.series.length >= 3;
     return (
       <div className={styles.finBlock}>
         <div className={styles.finCaption}>{cap}</div>
-        {long ? (
-          <FinLineChart series={fin.series} />
+        {fin.series.length >= 3 ? (
+          <FinChart kind="trend" series={fin.series} unit={unit} />
         ) : (
-          <FinVBars items={fin.series.map((s) => ({ label: s.period, value: s.value }))} unit={unit} />
-        )}
-        {long && (
-          <table className={styles.finTable}><tbody>
-            {fin.series.map((s, i) => (
-              <tr key={i}>
-                <td className={styles.finTableName}>{s.period}</td>
-                <td className={styles.finTableVal}>{finNum(s.value, unit)}</td>
-              </tr>
-            ))}
-          </tbody></table>
+          <FinChart kind="bars" items={fin.series.map((s) => ({ label: s.period, value: s.value }))} unit={unit} />
         )}
       </div>
     );
@@ -620,7 +596,7 @@ function FinancialsBlock({ fin }: { fin: FinalFinancials }) {
   //    short-labelled companies go VERTICAL.
   const ranked = !!(fin.ranking && fin.ranking.length);
   const cat = ranked
-    ? fin.ranking!.map((r) => ({ label: r.name ?? "", value: r.value ?? 0, display: r.display, rank: r.rank }))
+    ? fin.ranking!.map((r) => ({ label: r.name ?? "", value: r.value ?? 0 }))
     : fin.comparison && fin.comparison.length
       ? fin.comparison.map((r) => ({ label: r.name ?? "", value: r.value ?? 0 }))
       : null;
@@ -634,7 +610,7 @@ function FinancialsBlock({ fin }: { fin: FinalFinancials }) {
             ? fin.field?.label ?? "Ranking"
             : `${fin.field?.label ?? "Comparison"}${fin.comparison?.[0]?.period ? ` · ${fin.comparison[0].period}` : ""}`}
         </div>
-        {horizontal ? <FinHBars items={cat} unit={unit} ranked={ranked} /> : <FinVBars items={cat} unit={unit} />}
+        <FinChart kind="bars" items={cat} unit={unit} horizontal={horizontal} />
       </div>
     );
   }
@@ -665,7 +641,8 @@ function FinancialsBlock({ fin }: { fin: FinalFinancials }) {
     if (unit === "%" && fin.value >= 0 && fin.value <= 100) {
       return (
         <div className={styles.finBlock}>
-          <FinGauge value={fin.value} label={label} sub={fin.period} />
+          <div className={styles.finCaption}>{label}{fin.period ? ` · ${fin.period}` : ""}</div>
+          <FinChart kind="gauge" value={fin.value} />
         </div>
       );
     }
@@ -1514,13 +1491,28 @@ function WorkspacePane({ messages, intentConfig, runMeta }: WorkspacePaneProps) 
       if (!fin || !isFinChart(fin)) return null;
       let q = "";
       for (let j = i - 1; j >= 0; j--) {
-        if (messages[j].role === "user") { q = messages[j].text; break; }
+        if (messages[j].role === "user") { q = stripSecId(messages[j].text); break; }
       }
       return { key: m.agentRunId ?? `fin-${i}`, title: q || fin.field?.label || "Financials", fin };
     })
     .filter((x): x is { key: string; title: string; fin: FinalFinancials } => x !== null);
 
-  const chartsCount = allCharts.length + finCharts.length;
+  // Universal visuals (technicals/news/…) across the conversation, each paired
+  // with the question that produced it — same pattern as finCharts.
+  const visualCharts = messages
+    .map((m, i) => {
+      const vis = m.role === "assistant" ? m.structured?.visuals : null;
+      if (!vis || vis.length === 0) return null;
+      let q = "";
+      for (let j = i - 1; j >= 0; j--) {
+        if (messages[j].role === "user") { q = stripSecId(messages[j].text); break; }
+      }
+      return { key: m.agentRunId ?? `vis-${i}`, title: q || "Insights", visuals: vis };
+    })
+    .filter((x): x is { key: string; title: string; visuals: Visual[] } => x !== null);
+
+  const chartsCount =
+    allCharts.length + finCharts.length + visualCharts.reduce((n, v) => n + v.visuals.length, 0);
 
   const tabs: { id: WorkspaceTab; label: string; count?: number }[] = [
     { id: "report", label: "Report" },
@@ -1566,7 +1558,7 @@ function WorkspacePane({ messages, intentConfig, runMeta }: WorkspacePaneProps) 
             }}
           />
         )}
-        {activeTab === "charts" && <ChartsView charts={allCharts} financials={finCharts} />}
+        {activeTab === "charts" && <ChartsView charts={allCharts} financials={finCharts} visuals={visualCharts} />}
         {activeTab === "tools" && <ToolsView tools={allTools} />}
         {activeTab === "sources" && (
           <SourcesView citations={citations} tools={allTools} />
@@ -1636,7 +1628,7 @@ function ReportView({
               ● {confidence} confidence
             </span>
           )}
-          {freshness && <span>· as of {freshness}</span>}
+          {freshness && <span>· as of {formatFreshness(freshness)}</span>}
           {runMeta.cost_usd !== null && runMeta.cost_usd > 0 && (
             <span>· ${runMeta.cost_usd.toFixed(4)}</span>
           )}
@@ -1668,6 +1660,10 @@ function ReportView({
 
         {/* Structured financials (chart / table) for this answer. */}
         {structured?.financials && <FinancialsBlock fin={structured.financials} />}
+        {/* Universal visuals (technicals / news / …) for this answer. */}
+        {structured?.visuals && structured.visuals.length > 0 && (
+          <VisualsBlock visuals={structured.visuals} />
+        )}
 
         {/* Named sections from FinalAnswer.sections — Executive summary,
             Anomaly flags, etc. Anomaly callouts get the warn accent. */}
@@ -1784,34 +1780,87 @@ function WorkspaceToolRow({ tool }: { tool: ToolCallState }) {
   );
 }
 
+/** A Workspace chart artifact: the question label + per-chart export (CSV from
+ *  the structured data, SVG from the rendered recharts node). Makes the Workspace
+ *  a true "take it out" Canvas/Artifacts surface. */
+function ChartItemFrame({
+  title, csv, children,
+}: { title: string; csv: string | null; children: React.ReactNode }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const name = slugify(title);
+  return (
+    <div className={styles.wsChartItem} ref={ref}>
+      <div className={styles.wsChartHead}>
+        <div className={styles.wsChartQuestion}>{title}</div>
+        <div className={styles.wsChartExport}>
+          {csv && (
+            <button
+              type="button"
+              className={styles.wsExportBtn}
+              title="Download data (CSV)"
+              onClick={() => downloadFile(csv, `${name}.csv`, "text/csv;charset=utf-8")}
+            >
+              CSV
+            </button>
+          )}
+          <button
+            type="button"
+            className={styles.wsExportBtn}
+            title="Download image (SVG)"
+            onClick={() => downloadSvg(ref.current, `${name}.svg`)}
+          >
+            SVG
+          </button>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 /** Sources tab — numbered citations from the structured final answer +
  *  any data-bearing tool calls that yielded a freshness signal. */
 /** Charts tab — one card per ChartEvent, hand-rolled SVG to keep deps light. */
 function ChartsView({
   charts,
   financials = [],
+  visuals = [],
 }: {
   charts: AssistantChart[];
   financials?: { key: string; title: string; fin: FinalFinancials }[];
+  visuals?: { key: string; title: string; visuals: Visual[] }[];
 }) {
-  if (charts.length === 0 && financials.length === 0) {
+  if (charts.length === 0 && financials.length === 0 && visuals.length === 0) {
     return (
       <div className={styles.wsEmptyState}>
         No charts yet. Charts surface when an answer returns a series, comparison,
-        ranking, or ratio — ask a financial question (e.g. &quot;Infosys EPS over
-        5 years&quot; or &quot;top 10 IT companies by revenue&quot;).
+        ranking, ratio, technicals, or sentiment — ask e.g. &quot;Infosys EPS over
+        5 years&quot;, &quot;TCS technicals&quot;, or &quot;news sentiment on Reliance&quot;.
       </div>
     );
   }
   return (
     <div className={styles.wsChartsList}>
-      {/* Financials visuals from the conversation, newest interactions last. */}
+      {/* Financials visuals from the conversation, newest interactions last —
+          each an exportable artifact (CSV data + SVG image). */}
       {financials.map((f) => (
-        <div key={f.key} className={styles.wsChartItem}>
-          <div className={styles.wsChartQuestion}>{f.title}</div>
+        <ChartItemFrame key={f.key} title={f.title} csv={financialsToCsv(f.fin)}>
           <FinancialsBlock fin={f.fin} />
-        </div>
+        </ChartItemFrame>
       ))}
+      {/* Universal visuals (technicals / news / future tools) — one exportable
+          artifact per visual. */}
+      {visuals.flatMap((g) =>
+        g.visuals.map((v, i) => (
+          <ChartItemFrame
+            key={`${g.key}-${i}`}
+            title={v.title ? `${g.title} · ${v.title}` : g.title}
+            csv={visualToCsv(v)}
+          >
+            <VisualOne v={v} />
+          </ChartItemFrame>
+        )),
+      )}
       {/* Legacy tool-emitted line/area charts (AssistantChart). */}
       {charts.length > 0 && (
         <div className={styles.chartsGrid}>
@@ -2272,7 +2321,7 @@ export default function ChatLayout({
                     <div className={styles.msgRoleIconUser}>{userInitial}</div>
                     {userFirstName}
                   </div>
-                  <div className={styles.msgUserBody}>{msg.text}</div>
+                  <div className={styles.msgUserBody}>{stripSecId(msg.text)}</div>
                 </div>
               );
             }

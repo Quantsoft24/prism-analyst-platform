@@ -204,6 +204,22 @@ export interface FinalFinancials {
   names?: string[];
 }
 
+/** UNIVERSAL, tool-agnostic visualization block — attached deterministically by
+ *  the runner from ANY non-financials tool result (technicals, news, …, and any
+ *  future tool). Rendered by a generic kind-switch renderer. financials uses its
+ *  own richer `FinalFinancials` block instead. */
+export interface Visual {
+  kind: "line" | "area" | "bar" | "gauge" | "kpi";
+  title?: string | null;
+  unit?: string | null;
+  orientation?: "vertical" | "horizontal" | null;
+  series?: { label: string; value: number }[];
+  value?: number | null;
+  kpis?: { label: string; value: number; unit?: string | null }[];
+  source_tool?: string | null;
+  call_id?: string | null;
+}
+
 /**
  * Structured final-answer payload. Present on ``FinalEvent.structured`` when
  * the agent emitted the ``<answer_meta>{...}</answer_meta>`` block at the
@@ -228,6 +244,9 @@ export interface FinalAnswer {
   /** Structured numeric result (from financials_query) — value card / chart /
    *  tables rendered under the prose. Optional; absent on non-financials turns. */
   financials?: FinalFinancials | null;
+  /** Universal visualizations from non-financials tools (technicals, news, …).
+   *  Optional; empty/absent when no tool returned a chartable shape. */
+  visuals?: Visual[] | null;
 }
 
 export interface FinalEvent {
