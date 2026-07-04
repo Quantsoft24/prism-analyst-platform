@@ -9,6 +9,15 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles/tokens.css"/>
   <script src="/config.js"></script>
+  <style>
+    .blog-hero { display:grid; grid-template-columns:180px 1fr; gap:40px; }
+    .blog-grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:24px; }
+    @media (max-width:900px){ .blog-grid{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
+    @media (max-width:640px){
+      .blog-hero{ grid-template-columns:1fr; gap:14px; }
+      .blog-grid{ grid-template-columns:1fr; }
+    }
+  </style>
 </head>
 <body>
 <div id="root"></div>
@@ -55,7 +64,7 @@ function Card({p, i, featured}) {
           <span className="chip">{p.c}</span>
           <span className="mono" style={{fontSize:11, color:"var(--muted)"}}>{p.d} · {p.r}</span>
         </div>
-        <div className="display" style={{fontSize: featured?40:22, letterSpacing:"-0.02em", lineHeight:1.1, marginBottom:10}}>{p.t}</div>
+        <div className="display" style={{fontSize: featured?"clamp(28px, 6vw, 40px)":22, letterSpacing:"-0.02em", lineHeight:1.1, marginBottom:10}}>{p.t}</div>
         <p style={{color:"var(--muted)", fontSize:14, margin:0, lineHeight:1.55}}>{p.sub}</p>
         <div style={{marginTop:18, display:"flex", alignItems:"center", gap:10}}>
           <div style={{width:26, height:26, borderRadius:"50%", background:"var(--ink)", color:"var(--ivory)", display:"grid", placeItems:"center", fontFamily:"var(--f-mono)", fontSize:10, fontWeight:600}}>{p.a.split(" ").map(x=>x[0]).join("")}</div>
@@ -74,7 +83,7 @@ function BlogIndex() {
     <>
       <section style={{padding:"48px 0 24px"}}>
         <div className="container">
-          <div style={{display:"grid", gridTemplateColumns:"180px 1fr", gap:40}}>
+          <div className="blog-hero">
             <div><span className="eyebrow" style={{borderTop:"1px solid var(--ink)", paddingTop:10, display:"inline-block"}}>Journal</span></div>
             <div>
               <h1 className="display" style={{fontSize:"clamp(40px, 5vw, 72px)", margin:"0 0 16px", letterSpacing:"-0.03em", lineHeight:1.05}}>
@@ -100,7 +109,7 @@ function BlogIndex() {
             ))}
           </div>
           {cat==="All" && <div style={{marginBottom:32}}><Card p={filtered[0]} i={0} featured/></div>}
-          <div style={{display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:24}}>
+          <div className="blog-grid">
             {(cat==="All"?filtered.slice(1):filtered).map((p,i)=><Card key={p.id} p={p} i={(cat==="All"?i+1:posts.indexOf(p))}/>)}
           </div>
         </div>

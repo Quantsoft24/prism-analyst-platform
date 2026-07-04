@@ -114,16 +114,20 @@ function ContactPage() {
           </div>
         </div>
 
-        <div style={{marginTop:56, paddingTop:32, borderTop:"1px solid var(--rule)", display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:24}}>
+        <div style={{marginTop:56, paddingTop:32, borderTop:"1px solid var(--rule)", display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))", gap:24}}>
           {[
-            ["Email", window.QS_CONFIG.EMAIL],
-            ["LinkedIn", window.QS_CONFIG.LINKEDIN_HANDLE],
-            ["Location", window.QS_CONFIG.LOCATION_SEC],
-            ["Response", "< 48 hrs"],
-          ].map(([a,b],i)=>(
+            ["Email", window.QS_CONFIG.EMAIL, `mailto:${window.QS_CONFIG.EMAIL}`, false],
+            ["LinkedIn", window.QS_CONFIG.LINKEDIN_HANDLE || "The Quantsoft", window.QS_CONFIG.LINKEDIN_URL, true],
+            ["Location", window.QS_CONFIG.LOCATION_SEC, null, false],
+            ["Response", "< 48 hrs", null, false],
+          ].map(([a,b,href,ext],i)=>(
             <div key={i}>
               <div className="mono" style={{fontSize:11, textTransform:"uppercase", letterSpacing:"0.1em", color:"var(--muted)", marginBottom:8}}>{a}</div>
-              <div style={{fontSize:16, fontWeight:500}}>{b}</div>
+              <div style={{fontSize:16, fontWeight:500}}>
+                {href
+                  ? <a href={href} {...(ext ? { target:"_blank", rel:"noopener noreferrer" } : {})} style={{color:"var(--accent)"}}>{b}</a>
+                  : b}
+              </div>
             </div>
           ))}
         </div>

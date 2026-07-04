@@ -259,7 +259,7 @@ function Contact() {
   return (
     <section id="contact" style={{ background: "var(--ink)", color: "var(--ivory)", borderTop: "1px solid var(--ink)" }}>
       <div className="container">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: 80, alignItems: "start" }}>
+        <div className="qs-contact-split">
           <div>
             <div className="eyebrow" style={{ color: "var(--muted-2)", borderTop: "1px solid var(--muted)", paddingTop: 10, display: "inline-block" }}>Contact</div>
             <h2 className="display" style={{ color: "var(--ivory)", fontSize: "clamp(40px, 5vw, 64px)", margin: "24px 0 20px" }}>
@@ -269,10 +269,18 @@ function Contact() {
               Whether you're modernizing legacy workflows, deploying AI into production, or building operational infrastructure from the ground up — we'll help you design and ship systems engineered for the real world.
             </p>
             <div style={{ marginTop: 40, display: "grid", gap: 14 }}>
-              {[["Email", window.QS_CONFIG.EMAIL], ["LinkedIn", window.QS_CONFIG.LINKEDIN_HANDLE], ["Location", window.QS_CONFIG.LOCATION_MAIN]].map(([a, b], i) => (
+              {[
+                ["Email", window.QS_CONFIG.EMAIL, `mailto:${window.QS_CONFIG.EMAIL}`, false],
+                ["LinkedIn", window.QS_CONFIG.LINKEDIN_HANDLE || "The Quantsoft", window.QS_CONFIG.LINKEDIN_URL, true],
+                ["Location", window.QS_CONFIG.LOCATION_MAIN, null, false],
+              ].map(([a, b, href, ext], i) => (
                 <div key={i} style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 20, paddingTop: 14, borderTop: "1px solid var(--ink-3)" }}>
                   <div className="mono" style={{ fontSize: 11, color: "var(--muted-2)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{a}</div>
-                  <div style={{ fontSize: 14 }}>{b}</div>
+                  <div style={{ fontSize: 14 }}>
+                    {href
+                      ? <a href={href} {...(ext ? { target: "_blank", rel: "noopener noreferrer" } : {})} style={{ color: "var(--accent)" }}>{b}</a>
+                      : b}
+                  </div>
                 </div>
               ))}
             </div>
