@@ -9,6 +9,31 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles/tokens.css"/>
   <script src="/config.js"></script>
+  <style>
+    /* Article layout — 3-col on desktop, single column on tablet/mobile so the
+       fixed-width center column can't overflow and collide with the sidebars. */
+    .post-grid { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,720px) minmax(0,1fr); gap:40px; }
+    .post-toc { position:sticky; top:100px; align-self:start; padding-top:10px; }
+    .post-share { padding-top:10px; }
+    .more-grid { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:24px; }
+    /* Mobile "Contents" — a collapsible accordion at the top of the article.
+       Hidden on desktop (the sticky rail is used there). */
+    .post-toc-m { display:none; margin:0 0 28px; border:1px solid var(--rule); border-radius:12px; background:var(--paper); }
+    .post-toc-m > summary { list-style:none; cursor:pointer; padding:13px 16px; font-family:var(--f-mono); font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); display:flex; align-items:center; justify-content:space-between; }
+    .post-toc-m > summary::-webkit-details-marker { display:none; }
+    .post-toc-m > summary::after { content:"+"; font-size:15px; line-height:1; }
+    .post-toc-m[open] > summary::after { content:"\2013"; }
+    .post-toc-m .toc-list { padding:0 16px 12px; }
+    .post-toc-m .toc-list a { display:block; padding:9px 0; font-family:var(--f-mono); font-size:13px; color:var(--muted); border-top:1px solid var(--rule); }
+    @media (max-width:960px){
+      .post-grid { grid-template-columns: minmax(0,1fr); }
+      .post-toc { display:none; }        /* desktop sticky rail hidden on mobile... */
+      .post-toc-m { display:block; }     /* ...replaced by the collapsible accordion */
+      .post-share { border-top:1px solid var(--rule); padding-top:24px; margin-top:8px; }
+      .more-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media (max-width:600px){ .more-grid { grid-template-columns: 1fr; } }
+  </style>
 </head>
 <body>
 <div id="root"></div>
@@ -62,20 +87,28 @@ function Hero() {
 }
 
 function Article() {
+  const toc = ["1. Survivorship","2. Look-ahead","3. Overfitting","4. Regime change","5. Transaction costs","6. The fix"];
   return (
     <article style={{padding:"80px 0"}}>
       <div className="container">
-        <div style={{display:"grid", gridTemplateColumns:"1fr 720px 1fr", gap:40}}>
-          <aside style={{position:"sticky", top:100, alignSelf:"start", paddingTop:10}}>
+        <div className="post-grid">
+          <aside className="post-toc">
             <div className="eyebrow" style={{marginBottom:14}}>Contents</div>
             <div style={{display:"grid", gap:10}}>
-              {["1. Survivorship","2. Look-ahead","3. Overfitting","4. Regime change","5. Transaction costs","6. The fix"].map((s,i)=>(
+              {toc.map((s,i)=>(
                 <a key={i} href={`#s${i}`} className="mono" style={{fontSize:12, color:"var(--muted)", padding:"4px 0", borderLeft:"2px solid var(--rule)", paddingLeft:12}}>{s}</a>
               ))}
             </div>
           </aside>
 
           <div style={{fontSize:18, lineHeight:1.7, color:"var(--ink-2)"}}>
+            {/* Mobile-only collapsible Contents (the sticky rail is hidden on small screens) */}
+            <details className="post-toc-m">
+              <summary>Contents</summary>
+              <div className="toc-list">
+                {toc.map((s,i)=>(<a key={i} href={`#s${i}`}>{s}</a>))}
+              </div>
+            </details>
             <p style={{fontSize:22, color:"var(--ink)", fontFamily:"var(--f-display)", lineHeight:1.4, letterSpacing:"-0.005em"}}>
               Every quant begins the same way. A clean Sharpe of 2.4, a drawdown of -6%, an equity curve that bends upward like it was drawn by hand. Then you trade it live. And it dies.
             </p>
@@ -124,7 +157,7 @@ function Article() {
             <p>This is the work. It is slower, less flattering, and far more useful than a clean equity curve.</p>
           </div>
 
-          <div style={{paddingTop:10}}>
+          <div className="post-share">
             <div className="eyebrow" style={{marginBottom:14}}>Share</div>
             <div style={{display:"grid", gap:8}}>
               {["Copy link","LinkedIn","X / Twitter","Email"].map(s=>(
@@ -146,7 +179,7 @@ function More() {
           <div><span className="eyebrow">Keep reading</span></div>
           <h2>More from the desk.</h2>
         </div>
-        <div style={{display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:24}}>
+        <div className="more-grid">
           {[
             ["Momentum in Nifty 500: a 20-year study","Factors","Feb 28, 2026"],
             ["What F&O retail really pays for","Market structure","Feb 11, 2026"],

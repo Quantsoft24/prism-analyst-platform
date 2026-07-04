@@ -16,8 +16,9 @@
   --indigo-2: #253684;
   --indigo-tint: #E8E9F1;
 
-  --accent: #E8511C;      /* saffron-red, quant signal */
-  --accent-tint: #FBE9DF;
+  --accent: #2472C4;      /* royal azure — brand highlight */
+  --accent-tint: #E4EEF8; /* pale azure wash (chips, success-badge bg) */
+  --accent-deep: #1D5CA0; /* hover / pressed */
 
   --green: #1F7A4D;       /* up */
   --green-tint: #E2F1EA;
@@ -264,6 +265,12 @@ section.tight { padding: 56px 0; }
     margin-top: 36px !important;
   }
   .hero-stats-grid .mono { font-size: 18px !important; }
+}
+
+/* Contact section (info | form) — stacks on tablet/mobile */
+.qs-contact-split { display: grid; grid-template-columns: 1fr 1.1fr; gap: 80px; align-items: start; }
+@media (max-width: 860px) {
+  .qs-contact-split { grid-template-columns: 1fr; gap: 40px; }
 }
 
 /* ============ RESPONSIVE ============ */
