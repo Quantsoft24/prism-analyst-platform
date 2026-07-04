@@ -133,7 +133,7 @@ function Footer() {
               <li><a href="Terms.html">Terms</a></li>
               <li><a href="Privacy.html">Privacy</a></li>
               <li><a href={`mailto:${window.QS_CONFIG.EMAIL}`}>Email</a></li>
-              <li><a href={window.QS_CONFIG.LINKEDIN_URL}>LinkedIn</a></li>
+              <li><a href={window.QS_CONFIG.LINKEDIN_URL} target="_blank" rel="noopener noreferrer">LinkedIn</a></li>
             </ul>
           </div>
         </div>
