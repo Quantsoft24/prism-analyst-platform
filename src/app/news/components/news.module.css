@@ -74,6 +74,10 @@
 .suggestStrip::-webkit-scrollbar { display: none; }
 .suggestStrip > * { flex-shrink: 0; }
 @media (min-width: 640px) { .suggestStrip { flex: 1; } }
+.suggestLabel {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-faint); padding-right: 2px;
+}
 
 /* Time-window selector */
 .windowSelector {
@@ -169,25 +173,12 @@
   font-size: 20px; letter-spacing: -0.01em; color: var(--ink);
 }
 
-/* ── Add-to-watchlist row ────────────────────────────────────────────────── */
-.addRow { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.addInput {
-  width: 160px; padding: 8px 12px;
-  border: 1px solid var(--line); border-radius: var(--radius-md);
-  background: var(--bg-elev); color: var(--ink); font-size: 14px;
-  box-shadow: var(--shadow-sm);
-  transition: border-color var(--transition-fast);
-}
-@media (min-width: 640px) { .addInput { width: 208px; } }
-.addInput::placeholder { color: var(--ink-faint); }
-.addInput:focus-visible { outline: none; border-color: var(--accent); }
-.trackBtn {
-  padding: 8px 16px; border-radius: var(--radius-md);
-  background: var(--accent); color: var(--text-on-accent);
-  font-size: 12px; font-weight: 600; box-shadow: var(--shadow-sm);
-  transition: opacity var(--transition-fast);
-}
-.trackBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+/* ── Track box — hosts the shared SecuritySearch (same picker as Stocks/BMC) ──
+   Full width on mobile; a fixed lane on desktop so the suggestion dropdown has
+   room for the exchange badge + name + symbol/ISIN/sector meta row. */
+.trackSearch { flex-shrink: 0; width: 100%; }
+@media (min-width: 640px) { .trackSearch { width: 260px; } }
+
 .clearBtn {
   padding: 6px 12px; border: 1px solid var(--line); border-radius: var(--radius-md);
   font-size: 12px; font-weight: 500; color: var(--ink-mute);

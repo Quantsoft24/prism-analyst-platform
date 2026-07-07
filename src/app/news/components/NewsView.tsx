@@ -4,6 +4,8 @@ import * as React from "react";
 
 import {
   SECTORS,
+  buildArticleAskPrompt,
+  normalizeCompanyForNews,
   timeAgoFrom,
   useNewsSources,
   useNewsTrending,
@@ -14,6 +16,8 @@ import {
   type TrendingCompany,
 } from "@/lib/api/news";
 import { useWatchlist } from "@/hooks/useWatchlist";
+import SecuritySearch from "@/app/stocks/components/SecuritySearch";
+import { type Security } from "@/lib/api/stocks";
 import { cn } from "@/lib/utils";
 
 import NewsFeed from "./NewsFeed";
@@ -27,10 +31,12 @@ const HOURS_OPTIONS = [
   { label: "10d", value: 240 },
 ];
 
-// Popular Indian names offered as one-click quick picks (inspired by the
-// PRISM_ANALYST news page). A deep pool so the suggestions never run dry —
-// the chips bar always surfaces the next untracked names from this list.
-const QUICK_PICKS = [
+// Cold-start fallback for the quick-add chips. Quick picks are normally driven
+// LIVE by /news/trending (see `suggestions` below); this curated pool only
+// surfaces when trending is still loading, errored, or thin (quiet windows /
+// weekends) so the chips bar never renders empty. These names are already in
+// the news alias vocabulary, so adding them resolves.
+const QUICK_PICKS_FALLBACK = [
   "Reliance Industries",
   "TCS",
   "HDFC Bank",
@@ -84,7 +90,6 @@ export default function NewsView({ onAsk }: NewsViewProps) {
   const [hours, setHours] = React.useState(24);
   const [sector, setSector] = React.useState<SectorCode | undefined>(undefined);
   const [companyFilter, setCompanyFilter] = React.useState<string | undefined>(undefined);
-  const [addInput, setAddInput] = React.useState("");
   // Sub-filter focus: a subset of tracked companies to scope the feed to
   // (server-side, so alias resolution handles "TCS" → "Tata Consultancy…").
   const [focus, setFocus] = React.useState<string[]>([]);
@@ -140,21 +145,27 @@ export default function NewsView({ onAsk }: NewsViewProps) {
 
   const handleAskArticle = React.useCallback(
     (article: NewsArticle) => {
-      const co = article.companies?.[0];
-      const q = co
-        ? `What's the significance of this news for ${co}? "${article.title}" (${article.source})`
-        : `Give me context on this headline: "${article.title}" (${article.source})`;
-      onAsk?.(q);
+      // Hand the agent the FULL article context (headline, source, time,
+      // companies, sector, sentiment, summary, link) so it reasons about this
+      // exact story instead of re-deriving from a bare headline. Routed via
+      // onAsk → draftQuery, which prefills the composer for review/edit.
+      onAsk?.(buildArticleAskPrompt(article));
     },
     [onAsk],
   );
 
-  const handleAddWatch = React.useCallback(() => {
-    const name = addInput.trim();
-    if (!name) return;
-    watchlist.add(name);
-    setAddInput("");
-  }, [addInput, watchlist]);
+  // Track a company from the shared SecuritySearch (same picker used on the
+  // Stocks & BMC dashboards). The stocks list carries full legal names ("… Ltd.")
+  // that the news alias master doesn't recognise, so we normalise to the
+  // de-suffixed canonical ("Tata Consultancy Services") before tracking — that's
+  // what the news feed resolves. See normalizeCompanyForNews / network logs.
+  const handlePickCompany = React.useCallback(
+    (security: Security) => {
+      const raw = security.security_name ?? security.symbol;
+      if (raw) watchlist.add(normalizeCompanyForNews(raw));
+    },
+    [watchlist],
+  );
 
   // Keep the sub-filter focus in sync with the watchlist (drop any company that
   // was untracked).
@@ -183,37 +194,34 @@ export default function NewsView({ onAsk }: NewsViewProps) {
   const live = !trending.isError && !sources.isError;
 
   // Quick-add suggestions (untracked names) — surfaced inline in the toolbar to
-  // use the space between the track box and the time-window pills.
-  const suggestions = QUICK_PICKS.filter((p) => !watchlist.watchlist.includes(p)).slice(
-    0,
-    QUICK_PICK_VISIBLE,
-  );
+  // use the space between the track box and the time-window pills. Driven LIVE
+  // by /news/trending (already fetched above for the rail); trending names are
+  // news-canonical so adding them always resolves. Falls back to the curated
+  // pool when the window is quiet or trending hasn't loaded/errored.
+  const trendingNames = (trending.data?.trending ?? []).map((t) => t.company);
+  const quickPickPool = trendingNames.length > 0 ? trendingNames : QUICK_PICKS_FALLBACK;
+  const trendingLive = trendingNames.length > 0;
+  const alreadyTracked = (name: string) =>
+    watchlist.watchlist.some((w) => w.toLowerCase() === name.toLowerCase());
+  const suggestions = quickPickPool
+    .filter((p) => !alreadyTracked(p))
+    .slice(0, QUICK_PICK_VISIBLE);
 
   return (
     <div className={styles.page} ref={pageRef}>
       {/* ── Toolbar (sticky): track box · quick-add suggestions · time window ── */}
       <header className={styles.header} ref={headerRef}>
         <div className={styles.headerMain}>
-          <div className={styles.addRow}>
-            <input
-              value={addInput}
-              onChange={(e) => setAddInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAddWatch()}
-              placeholder="Track a company…"
-              className={styles.addInput}
-            />
-            <button
-              onClick={handleAddWatch}
-              disabled={!addInput.trim() || watchlist.isFull}
-              className={styles.trackBtn}
-            >
-              Track
-            </button>
+          <div className={styles.trackSearch}>
+            <SecuritySearch onSelect={handlePickCompany} placeholder="Track a company…" />
           </div>
 
-          {/* Quick-add suggestions fill the middle space */}
+          {/* Quick-add suggestions fill the middle space — live from trending */}
           {suggestions.length > 0 && (
             <div className={styles.suggestStrip}>
+              <span className={styles.suggestLabel}>
+                {trendingLive ? "Trending" : "Popular"}
+              </span>
               {suggestions.map((c) => (
                 <button key={c} className={styles.chip} onClick={() => watchlist.add(c)}>
                   + {c}

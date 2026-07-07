@@ -417,7 +417,47 @@
 .calEvent:hover { filter: brightness(0.96); }
 .calEventDeadline { background: var(--neg-soft); color: var(--neg); }
 .calEventBoard { background: var(--info-soft); color: var(--info); }
-.calMore { display: block; font-size: 9px; color: var(--ink-mute); padding: 1px 6px; }
+/* Overflow trigger — a real button that opens the day-detail popover. */
+.calMore {
+  display: block; width: 100%; text-align: left;
+  font-size: 9px; font-weight: 600; color: var(--ink-mute);
+  padding: 2px 6px; border-radius: var(--radius-sm); cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.calMore:hover { background: var(--bg-sunken); color: var(--ink); }
+/* Day number becomes a button when the day has events (opens the popover). */
+.calNumBtn {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  border-radius: var(--radius-sm); transition: color var(--transition-fast);
+}
+.calNumBtn:hover { color: var(--accent); }
+
+/* Day-detail popover (portalled, position:fixed via inline top/left/width). */
+.dayPopover {
+  position: fixed; z-index: 200; display: flex; flex-direction: column;
+  max-height: 380px; border: 1px solid var(--line); border-radius: var(--radius-md);
+  background: var(--bg-elev); box-shadow: var(--shadow-lg); overflow: hidden;
+}
+.dayPopHead {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.dayPopTitle { font-size: 13px; font-weight: 600; color: var(--ink); }
+.dayPopCount { font-family: var(--font-mono); font-size: 10px; color: var(--ink-mute); }
+.dayPopClose {
+  display: inline-flex; margin-left: auto; padding: 3px; border-radius: var(--radius-sm);
+  color: var(--ink-mute); cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.dayPopClose:hover { background: var(--bg-sunken); color: var(--ink); }
+.dayPopList { display: flex; flex-direction: column; gap: 4px; padding: 8px; overflow-y: auto; }
+.dayPopEvent {
+  display: block; width: 100%; text-align: left;
+  font-size: 12px; font-weight: 500; line-height: 1.35; padding: 7px 9px;
+  border-radius: var(--radius-sm); white-space: normal; cursor: pointer;
+  transition: filter var(--transition-fast);
+}
+.dayPopEvent:hover { filter: brightness(0.96); }
 .calGrid { transition: opacity var(--transition-fast); }
 .calGridLoading { opacity: 0.5; pointer-events: none; }
 .calLegend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; font-size: 11px; color: var(--ink-mute); }

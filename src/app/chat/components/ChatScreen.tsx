@@ -11,10 +11,10 @@ import { useChatActions, useChatState } from "@/components/ChatProvider";
  */
 export default function ChatScreen() {
   const chat = useChatState();
-  const { sendQuery } = useChatActions();
+  const { sendQuery, draft, clearDraft } = useChatActions();
 
   if (chat.phase === "idle") {
-    return <AskScreen onSend={sendQuery} />;
+    return <AskScreen onSend={sendQuery} initialQuery={draft ?? ""} onDraftConsumed={clearDraft} />;
   }
   return chat.intentConfig ? (
     <ChatLayout
