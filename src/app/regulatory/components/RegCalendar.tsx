@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
 import {
@@ -26,6 +27,16 @@ export default function RegCalendar({ onOpenDoc }: Props) {
     y: now.getFullYear(),
     m: now.getMonth(),
   });
+
+  // Day-detail popover: which day is expanded + the anchor cell's viewport rect
+  // (so the fixed, portalled popover positions next to it and escapes the grid's
+  // `overflow: hidden`). Opened by "+N more" or clicking a day with events.
+  const [dayPopover, setDayPopover] = React.useState<{ key: string; rect: DOMRect } | null>(null);
+  const openDayPopover = React.useCallback((anchor: HTMLElement, key: string) => {
+    const cell = (anchor.closest("[data-daycell]") as HTMLElement | null) ?? anchor;
+    setDayPopover({ key, rect: cell.getBoundingClientRect() });
+  }, []);
+  const closeDayPopover = React.useCallback(() => setDayPopover(null), []);
 
   // Grid events for the visible month (deadlines + board meetings, past or
   // future) — refetched as the user navigates months.
@@ -128,13 +139,26 @@ export default function RegCalendar({ onOpenDoc }: Props) {
             return (
               <div
                 key={key}
+                data-daycell={c ? key : undefined}
                 className={cn(
                   styles.calCell,
                   !c && styles.calCellMuted,
                   c && key === todayKey && styles.calCellToday,
                 )}
               >
-                {c && <div className={styles.calNum}>{c}</div>}
+                {c &&
+                  (dayEvents.length > 0 ? (
+                    <button
+                      type="button"
+                      className={cn(styles.calNum, styles.calNumBtn)}
+                      onClick={(ev) => openDayPopover(ev.currentTarget, key)}
+                      title={`View all ${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"} on this day`}
+                    >
+                      {c}
+                    </button>
+                  ) : (
+                    <div className={styles.calNum}>{c}</div>
+                  ))}
                 {dayEvents.slice(0, 3).map((e, j) => (
                   <button
                     key={`${e.id}-${e.kind}-${j}`}
@@ -149,7 +173,13 @@ export default function RegCalendar({ onOpenDoc }: Props) {
                   </button>
                 ))}
                 {dayEvents.length > 3 && (
-                  <span className={styles.calMore}>+{dayEvents.length - 3} more</span>
+                  <button
+                    type="button"
+                    className={styles.calMore}
+                    onClick={(ev) => openDayPopover(ev.currentTarget, key)}
+                  >
+                    +{dayEvents.length - 3} more
+                  </button>
                 )}
               </div>
             );
@@ -219,7 +249,123 @@ export default function RegCalendar({ onOpenDoc }: Props) {
           <EmptyState title="No deadlines" text="Nothing due in the next 30 days." />
         )}
       </div>
+
+      {dayPopover && (
+        <DayPopover
+          dateKey={dayPopover.key}
+          rect={dayPopover.rect}
+          events={byDate.get(dayPopover.key) ?? []}
+          onOpenDoc={(id) => {
+            onOpenDoc(id);
+            closeDayPopover();
+          }}
+          onClose={closeDayPopover}
+        />
+      )}
     </div>
+  );
+}
+
+/* ── Day-detail popover ──────────────────────────────────────────────────────
+ * The overflow "+N more" (and clicking a day) opens this: the FULL event list
+ * for that day, each row opening the doc. Portalled to <body> + position:fixed
+ * so it escapes the grid's `overflow: hidden`; dismisses on outside-click, Esc,
+ * or scroll/resize (the anchor rect is a snapshot). Mirrors the outside-click
+ * pattern used by SecuritySearch / the feedback picker. */
+function DayPopover({
+  dateKey,
+  rect,
+  events,
+  onOpenDoc,
+  onClose,
+}: {
+  dateKey: string;
+  rect: DOMRect;
+  events: CalendarEvent[];
+  onOpenDoc: (id: number) => void;
+  onClose: () => void;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    ref.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    // The anchor rect is captured at open time, so close if the page moves.
+    const onMove = () => onClose();
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
+    };
+  }, [onClose]);
+
+  if (typeof document === "undefined") return null;
+
+  // Position: below the anchor cell, flipped above when there isn't room, and
+  // clamped to the viewport horizontally.
+  const W = 264;
+  const M = 8;
+  const estH = Math.min(64 + events.length * 40, 380);
+  const left = Math.max(M, Math.min(rect.left, window.innerWidth - W - M));
+  const openUp = rect.bottom + estH + M > window.innerHeight && rect.top - estH - M > 0;
+  const top = openUp ? rect.top - estH - 6 : rect.bottom + 6;
+
+  const dateLabel = new Date(dateKey + "T00:00:00").toLocaleDateString("en-IN", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  return createPortal(
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={`Events on ${dateLabel}`}
+      tabIndex={-1}
+      className={styles.dayPopover}
+      style={{ top, left, width: W }}
+    >
+      <div className={styles.dayPopHead}>
+        <span className={styles.dayPopTitle}>{dateLabel}</span>
+        <span className={styles.dayPopCount}>
+          {events.length} event{events.length === 1 ? "" : "s"}
+        </span>
+        <button type="button" className={styles.dayPopClose} onClick={onClose} aria-label="Close">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div className={styles.dayPopList}>
+        {events.map((e, j) => (
+          <button
+            key={`${e.id}-${e.kind}-${j}`}
+            type="button"
+            className={cn(
+              styles.dayPopEvent,
+              e.kind === "board" ? styles.calEventBoard : styles.calEventDeadline,
+            )}
+            title={`${e.kind === "board" ? "Board meeting" : "Deadline"}: ${e.title}`}
+            onClick={() => onOpenDoc(e.id)}
+          >
+            {e.title}
+          </button>
+        ))}
+      </div>
+    </div>,
+    document.body,
   );
 }
 
