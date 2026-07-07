@@ -7,6 +7,12 @@ import styles from "./AskScreen.module.css";
 
 interface AskScreenProps {
   onSend: (query: string) => void;
+  /** Optional prefill (e.g. a grounded "Ask PRISM" question) — seeds the
+   *  composer for the user to review/edit rather than firing automatically. */
+  initialQuery?: string;
+  /** Called once after mounting with a prefill, so the provider clears the
+   *  one-shot draft (navigating back doesn't re-seed). */
+  onDraftConsumed?: () => void;
 }
 
 /** Icon for each suggestion card — keyed by the suggestion's ``icon``
@@ -39,12 +45,22 @@ const SUGGESTION_ICONS: Record<string, React.ReactNode> = {
   ),
 };
 
-export default function AskScreen({ onSend }: AskScreenProps) {
-  const [query, setQuery] = useState("");
+export default function AskScreen({ onSend, initialQuery = "", onDraftConsumed }: AskScreenProps) {
+  const [query, setQuery] = useState(initialQuery);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Focus on mount. If we mounted with a prefilled draft, place the cursor at
+  // the end (ready to edit/append) and clear the provider's one-shot draft so a
+  // later return to this screen doesn't re-seed it.
   useEffect(() => {
-    textareaRef.current?.focus();
+    const el = textareaRef.current;
+    el?.focus();
+    if (initialQuery) {
+      el?.setSelectionRange(initialQuery.length, initialQuery.length);
+      onDraftConsumed?.();
+    }
+    // Mount-only: seed once from the entry draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

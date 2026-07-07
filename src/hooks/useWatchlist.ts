@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { normalizeCompanyForNews } from "@/lib/api/news";
+
 /**
  * News watchlist persisted to localStorage.
  *
@@ -52,8 +54,21 @@ export function useWatchlist(): UseWatchlist {
   const [watchlist, setWatchlist] = useState<string[]>([]);
 
   // Hydrate after mount (avoids SSR/client mismatch).
+  //
+  // One-time heal: companies tracked before company-name normalization landed
+  // carry the stocks legal form ("… Ltd."), which the news service can't resolve
+  // (returns 0 articles). Normalize + case-insensitively dedupe on load so
+  // legacy watchlists self-fix; the persist effect writes the cleaned list back.
+  // Idempotent for already-normalized names.
   useEffect(() => {
-    setWatchlist(readStored());
+    const healed: string[] = [];
+    for (const raw of readStored()) {
+      const name = normalizeCompanyForNews(raw);
+      if (name && !healed.some((c) => c.toLowerCase() === name.toLowerCase())) {
+        healed.push(name);
+      }
+    }
+    setWatchlist(healed);
   }, []);
 
   // Persist on every change.

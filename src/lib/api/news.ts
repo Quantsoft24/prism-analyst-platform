@@ -244,10 +244,15 @@ export function useNewsFeed(
     queryKey: newsKeys.feed(params),
     queryFn: ({ signal }) => newsApi.feed(params, signal),
     refetchInterval: NEWS_REFRESH_MS,
-    // Override the app-wide refetchOnWindowFocus:false — news is time-sensitive,
-    // so when an analyst returns to the tab (the interval pauses while it's
-    // hidden) we refetch immediately instead of showing minutes-old data.
+    // News is time-sensitive, but respect the visible 5-min countdown: only
+    // refetch on tab-refocus when the data is ACTUALLY stale (≥ the refresh
+    // interval), not on every focus. Without this, the app-wide staleTime (30s)
+    // made a quick tab-switch-and-back trigger an immediate refetch that reset
+    // the countdown early. staleTime = the interval ties the on-focus refetch to
+    // the countdown: switching away and back mid-cycle no longer refreshes;
+    // returning after the cycle has elapsed still gets fresh data.
     refetchOnWindowFocus: true,
+    staleTime: NEWS_REFRESH_MS,
     ...options,
   });
 }
@@ -270,10 +275,15 @@ export function useInfiniteNewsFeed(params: Omit<FeedParams, "page" | "limit">) 
       return m.current_page < m.total_pages ? m.current_page + 1 : undefined;
     },
     refetchInterval: NEWS_REFRESH_MS,
-    // Override the app-wide refetchOnWindowFocus:false — news is time-sensitive,
-    // so when an analyst returns to the tab (the interval pauses while it's
-    // hidden) we refetch immediately instead of showing minutes-old data.
+    // News is time-sensitive, but respect the visible 5-min countdown: only
+    // refetch on tab-refocus when the data is ACTUALLY stale (≥ the refresh
+    // interval), not on every focus. Without this, the app-wide staleTime (30s)
+    // made a quick tab-switch-and-back trigger an immediate refetch that reset
+    // the countdown early. staleTime = the interval ties the on-focus refetch to
+    // the countdown: switching away and back mid-cycle no longer refreshes;
+    // returning after the cycle has elapsed still gets fresh data.
     refetchOnWindowFocus: true,
+    staleTime: NEWS_REFRESH_MS,
   });
 }
 
@@ -286,10 +296,15 @@ export function useNewsTrending(
     queryKey: newsKeys.trending(hours, limit),
     queryFn: ({ signal }) => newsApi.trending(hours, limit, signal),
     refetchInterval: NEWS_REFRESH_MS,
-    // Override the app-wide refetchOnWindowFocus:false — news is time-sensitive,
-    // so when an analyst returns to the tab (the interval pauses while it's
-    // hidden) we refetch immediately instead of showing minutes-old data.
+    // News is time-sensitive, but respect the visible 5-min countdown: only
+    // refetch on tab-refocus when the data is ACTUALLY stale (≥ the refresh
+    // interval), not on every focus. Without this, the app-wide staleTime (30s)
+    // made a quick tab-switch-and-back trigger an immediate refetch that reset
+    // the countdown early. staleTime = the interval ties the on-focus refetch to
+    // the countdown: switching away and back mid-cycle no longer refreshes;
+    // returning after the cycle has elapsed still gets fresh data.
     refetchOnWindowFocus: true,
+    staleTime: NEWS_REFRESH_MS,
     ...options,
   });
 }
@@ -318,10 +333,15 @@ export function useNewsStats(
     queryKey: newsKeys.stats(),
     queryFn: ({ signal }) => newsApi.stats(signal),
     refetchInterval: NEWS_REFRESH_MS,
-    // Override the app-wide refetchOnWindowFocus:false — news is time-sensitive,
-    // so when an analyst returns to the tab (the interval pauses while it's
-    // hidden) we refetch immediately instead of showing minutes-old data.
+    // News is time-sensitive, but respect the visible 5-min countdown: only
+    // refetch on tab-refocus when the data is ACTUALLY stale (≥ the refresh
+    // interval), not on every focus. Without this, the app-wide staleTime (30s)
+    // made a quick tab-switch-and-back trigger an immediate refetch that reset
+    // the countdown early. staleTime = the interval ties the on-focus refetch to
+    // the countdown: switching away and back mid-cycle no longer refreshes;
+    // returning after the cycle has elapsed still gets fresh data.
     refetchOnWindowFocus: true,
+    staleTime: NEWS_REFRESH_MS,
     ...options,
   });
 }
@@ -334,10 +354,15 @@ export function useNewsSources(
     queryKey: newsKeys.sources(hours),
     queryFn: ({ signal }) => newsApi.sources(hours, signal),
     refetchInterval: NEWS_REFRESH_MS,
-    // Override the app-wide refetchOnWindowFocus:false — news is time-sensitive,
-    // so when an analyst returns to the tab (the interval pauses while it's
-    // hidden) we refetch immediately instead of showing minutes-old data.
+    // News is time-sensitive, but respect the visible 5-min countdown: only
+    // refetch on tab-refocus when the data is ACTUALLY stale (≥ the refresh
+    // interval), not on every focus. Without this, the app-wide staleTime (30s)
+    // made a quick tab-switch-and-back trigger an immediate refetch that reset
+    // the countdown early. staleTime = the interval ties the on-focus refetch to
+    // the countdown: switching away and back mid-cycle no longer refreshes;
+    // returning after the cycle has elapsed still gets fresh data.
     refetchOnWindowFocus: true,
+    staleTime: NEWS_REFRESH_MS,
     ...options,
   });
 }
@@ -379,6 +404,90 @@ export function useCompanySummaryMutation() {
     mutationFn: ({ company, hours }: { company: string; hours?: number }) =>
       newsApi.summary(company, hours ?? 24),
   });
+}
+
+// ── Company-name resolution ─────────────────────────────────────────────────
+
+/** Corporate suffixes carried by the stocks `master_securities` legal names
+ *  ("… Ltd.", "… Pvt Ltd", "… Corporation") that the prism-news alias master
+ *  does NOT key on — it uses the de-suffixed canonical ("Tata Consultancy
+ *  Services"). Anchored to the end so mid-name words ("Container Corporation of
+ *  India") are left intact. */
+const CORP_SUFFIX_RE =
+  /[\s,.]*\b(?:ltd|limited|pvt|private|inc|incorporated|corp|corporation|plc|llp)\b\.?\s*$/i;
+
+/**
+ * Normalize a company name so the news service's alias matching resolves it.
+ *
+ * The Stocks/BMC search resolves against `master_securities` (full legal names
+ * like "Tata Consultancy Services Ltd."), but prism-news matches on de-suffixed
+ * canonical names + short aliases. Sending the legal name verbatim returns 0
+ * articles (see `network_request_logs.txt`). We strip trailing corporate
+ * suffixes + punctuation so the name lands on the canonical form. Generic rules
+ * only — NO per-company table.
+ *
+ * This is the frontend bridge; the durable fix is server-side (the news service
+ * normalizing suffixes / indexing tickers, or news migrating to `security_id`
+ * so both systems share one key).
+ */
+export function normalizeCompanyForNews(name: string): string {
+  let out = name.trim();
+  // Peel repeated suffixes ("… Pvt Ltd." → "… Pvt" → "…").
+  let prev = "";
+  while (out !== prev) {
+    prev = out;
+    out = out.replace(CORP_SUFFIX_RE, "").trim();
+  }
+  out = out.replace(/[\s,.]+$/, "").trim();
+  return out || name.trim(); // never return empty
+}
+
+// ── "Ask PRISM" prompt builder ──────────────────────────────────────────────
+
+/**
+ * Build the grounded prompt for the per-article "Ask PRISM" action.
+ *
+ * The old version sent only `"title" (source)`, so the agent had to re-derive
+ * context from its tools and often drifted from the actual story. We now hand it
+ * the full article context the feed already carries — headline, source, time,
+ * tagged companies, sector, auto-sentiment, and the summary — so it reasons about
+ * THIS article. We include a real publisher link when present but drop opaque
+ * `news.google.com` redirect URLs (unfetchable + token-heavy), and skip RSS
+ * "echo" descriptions that merely repeat the title + source.
+ */
+export function buildArticleAskPrompt(article: NewsArticle): string {
+  const companies = (article.companies ?? []).filter(Boolean);
+
+  const lead = companies.length
+    ? `What is the significance and likely impact of this news for ${companies.join(", ")}? Explain what an equity analyst should take away and what to watch.`
+    : "Explain the significance and implications of this news for an equity analyst — what it means, the likely market impact, and what to watch.";
+
+  // Keep genuine summaries and multi-outlet round-ups; drop the RSS "echo"
+  // (description that's just "<title>  <Source>").
+  const titleNorm = article.title.replace(/\s+/g, " ").trim();
+  const descNorm = (article.description ?? "").replace(/\s+/g, " ").trim();
+  const isEcho =
+    !descNorm ||
+    descNorm === titleNorm ||
+    (descNorm.startsWith(titleNorm) && descNorm.length - titleNorm.length < 40);
+  const summary = isEcho ? "" : descNorm.slice(0, 700);
+
+  const link =
+    article.link && !/^https?:\/\/news\.google\.com/i.test(article.link) ? article.link : "";
+
+  const ctx: string[] = [`- Headline: ${article.title}`];
+  ctx.push(`- Source: ${article.source}${article.published_ist ? ` · ${article.published_ist}` : ""}`);
+  if (companies.length) ctx.push(`- Companies: ${companies.join(", ")}`);
+  if (article.sector) ctx.push(`- Sector: ${article.sector}`);
+  if (article.sentiment) {
+    ctx.push(
+      `- Auto-sentiment: ${article.sentiment.label} (${Math.round((article.sentiment.score ?? 0) * 100)}%)`,
+    );
+  }
+  if (summary) ctx.push(`- Summary: ${summary}`);
+  if (link) ctx.push(`- Link: ${link}`);
+
+  return `${lead}\n\nArticle context:\n${ctx.join("\n")}`;
 }
 
 // ── Display helpers (shared across components) ──────────────────────────────

@@ -32,6 +32,13 @@ interface ChatActions {
   activeConversationId: string | null;
   /** Run a query: BMC intents open the canvas, everything else routes to chat. */
   sendQuery: (query: string) => void;
+  /** Prefill the ask composer with a query (editable) and go to the ask screen,
+   *  WITHOUT firing it — used by "Ask PRISM" so the user reviews/edits first. */
+  draftQuery: (query: string) => void;
+  /** Pending one-shot prefill for the ask composer (null once consumed). */
+  draft: string | null;
+  /** Clear the pending draft after the composer has seeded from it. */
+  clearDraft: () => void;
   /** Reset the conversation and go to the chat (ask) screen. */
   newResearch: () => void;
   /** Resume a saved recent chat by id. */
@@ -54,6 +61,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const chat = useChat();
   const { toast } = useToast();
   const [bmcTicker, setBmcTicker] = React.useState<string | null>(null);
+  const [draft, setDraft] = React.useState<string | null>(null);
 
   // These are stable across renders (useChat memoises them), so the actions
   // below stay stable too.
@@ -74,6 +82,23 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     },
     [send, router, toast],
   );
+
+  // Prefill (don't fire): reset to the idle ask screen, seed the composer, and
+  // navigate. The AskScreen reads `draft` on mount and calls clearDraft(), so a
+  // later navigation back doesn't re-seed. reset() cancels any in-flight run
+  // (matching sendQuery's prior behaviour); the previous conversation is still
+  // saved server-side and resumable from recents.
+  const draftQuery = React.useCallback(
+    (query: string) => {
+      reset();
+      setDraft(query);
+      router.push("/chat");
+      toast("Review your question, then send", "info");
+    },
+    [reset, router, toast],
+  );
+
+  const clearDraft = React.useCallback(() => setDraft(null), []);
 
   const newResearch = React.useCallback(() => {
     reset();
@@ -113,8 +138,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [activeConversationId, pathname, router]);
 
   const actions = React.useMemo<ChatActions>(
-    () => ({ bmcTicker, activeConversationId, sendQuery, newResearch, sendRecent }),
-    [bmcTicker, activeConversationId, sendQuery, newResearch, sendRecent],
+    () => ({
+      bmcTicker,
+      activeConversationId,
+      sendQuery,
+      draftQuery,
+      draft,
+      clearDraft,
+      newResearch,
+      sendRecent,
+    }),
+    [bmcTicker, activeConversationId, sendQuery, draftQuery, draft, clearDraft, newResearch, sendRecent],
   );
 
   return (
