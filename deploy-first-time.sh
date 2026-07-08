@@ -91,18 +91,31 @@ mkdir -p ~/PRISM/prism-analyst-platform/certbot/www
 echo "   ✅ Done"
 echo ""
 
-# ── STEP 6: SSL cert for api subdomain ──
-echo "🔒 STEP 6: Checking SSL cert for api.thequantsoft.co.in..."
-if [ -d "/etc/letsencrypt/live/api.thequantsoft.co.in" ]; then
-  echo "   SSL cert already exists, skipping."
-else
-  echo "   Issuing new SSL cert..."
-  sudo certbot certonly --standalone \
-    -d api.thequantsoft.co.in \
-    --non-interactive --agree-tos \
-    -m praveen.kumar@thequantsoft.co.in
-  echo "   ✅ SSL cert issued"
-fi
+# ── STEP 6: SSL certs for all domains ──
+#
+# First issue uses --standalone (nginx isn't up yet, so certbot can bind :80).
+# ONGOING RENEWAL is handled automatically by the `certbot` service in
+# docker-compose.prod.yml via the webroot challenge — see docs/TLS_CERTS.md.
+# The ACME account email below is the registered contact for expiry warnings.
+ACME_EMAIL="praveen.kumar@thequantsoft.co.in"
+echo "🔒 STEP 6: Checking SSL certs (account: ${ACME_EMAIL})..."
+
+issue_cert() {
+  # $1 = live-dir name (primary domain); $2.. = -d args
+  local name="$1"; shift
+  if [ -d "/etc/letsencrypt/live/${name}" ]; then
+    echo "   ✅ ${name} — cert already exists, skipping."
+  else
+    echo "   Issuing cert for ${name}..."
+    sudo certbot certonly --standalone "$@" \
+      --non-interactive --agree-tos -m "${ACME_EMAIL}"
+    echo "   ✅ ${name} — issued"
+  fi
+}
+
+issue_cert thequantsoft.co.in     -d thequantsoft.co.in -d www.thequantsoft.co.in
+issue_cert prism.thequantsoft.co.in -d prism.thequantsoft.co.in
+issue_cert api.thequantsoft.co.in   -d api.thequantsoft.co.in
 echo ""
 
 # ── STEP 7: Build and deploy ──
