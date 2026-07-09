@@ -120,10 +120,20 @@ services:
       - prism-net
 
   # ── Nginx Reverse Proxy (:80/:443) ──
+  #
+  # `command` runs nginx in the foreground AND a background loop that issues a
+  # once-daily `nginx -s reload`. That reload is what makes auto-renewed TLS
+  # certs take effect: certbot (below) writes fresh certs to the shared
+  # /etc/letsencrypt volume, but nginx only re-reads cert files on reload —
+  # without it, nginx keeps serving the in-memory cert until the next deploy.
+  # `nginx -s reload` is a near-instant, zero-downtime graceful reload (NOT an
+  # expiry check); once a day is ample since renewal happens 30 days before
+  # expiry, so a renewed cert is live within ≤24h.
   nginx:
     image: nginx:alpine
     container_name: prism-nginx
     restart: unless-stopped
+    command: "/bin/sh -c 'while :; do sleep 24h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
     ports:
       - "80:80"
       - "443:443"
@@ -137,6 +147,65 @@ services:
       frontend:
         condition: service_started
       backend:
+        condition: service_started
+    networks:
+      - prism-net
+
+  # ── Certbot — automatic Let's Encrypt renewal (no ports) ──
+  #
+  # Runs `certbot renew` once a day. certbot is a no-op until a cert is within 30
+  # days of expiry, then it renews via the HTTP-01 **webroot** challenge:
+  #   - it writes the ACME token under ./certbot/www (shared with nginx),
+  #   - nginx already serves /.well-known/acme-challenge/ from that path on :80
+  #     for every domain (see nginx.conf), so Let's Encrypt validates it,
+  #   - the renewed cert lands in the shared /etc/letsencrypt volume,
+  #   - nginx picks it up on its next 6h reload (above).
+  #
+  # `--webroot -w /var/www/certbot` on the command line OVERRIDES each cert's
+  # stored authenticator for this run. This is deliberate: the certs were first
+  # issued with `--standalone` (which can't bind :80 while nginx holds it — the
+  # reason auto-renewal was failing). Forcing webroot here fixes that without a
+  # manual re-issue. See docs/TLS_CERTS.md to make the switch permanent in the
+  # renewal config and for first-issue / disaster-recovery steps.
+  certbot:
+    image: certbot/certbot:latest
+    container_name: prism-certbot
+    restart: unless-stopped
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      nginx:
+        condition: service_started
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 24h & wait $${!}; done'"
+    networks:
+      - prism-net
+
+  # ── Cert-monitor — daily expiry email alarm (no ports) ──
+  #
+  # Safety net AROUND certbot: once a day it reads the cert nginx serves for each
+  # host and emails (reusing the landing page's Gmail SMTP creds) if any cert is
+  # within CERT_ALERT_DAYS (5) of expiry — repeating daily until fixed. Under
+  # healthy auto-renewal certs never drop below ~30 days, so no email == healthy;
+  # an email means renewal is stuck (the failure that expired prism's cert). It
+  # connects to the nginx service over the compose network (SNI per host), so it
+  # reflects exactly what's served and dodges NAT hairpin. See scripts/
+  # cert_expiry_alert.py + docs/TLS_CERTS.md.
+  cert-monitor:
+    image: python:3.12-alpine
+    container_name: prism-cert-monitor
+    restart: unless-stopped
+    env_file: ./thequantsoft/.env      # SMTP_USER / SMTP_PASS / TARGET_EMAIL
+    environment:
+      CERT_ALERT_DAYS: "5"
+      CERT_ALERT_HOSTS: "thequantsoft.co.in,prism.thequantsoft.co.in,api.thequantsoft.co.in"
+      CERT_ALERT_CONNECT_HOST: "nginx"
+      CERT_ALERT_INTERVAL_SEC: "86400"
+    volumes:
+      - ./scripts/cert_expiry_alert.py:/app/cert_expiry_alert.py:ro
+    command: ["python", "-u", "/app/cert_expiry_alert.py"]
+    depends_on:
+      nginx:
         condition: service_started
     networks:
       - prism-net
