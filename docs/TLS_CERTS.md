@@ -98,15 +98,17 @@ cd ~/PRISM/prism-analyst-platform
 # 1. Pull the updated compose (adds the certbot service + nginx reload loop)
 git pull origin production
 
-# 2. Bring up the new certbot service + recreate nginx with the reload loop
-docker compose -f docker-compose.prod.yml up -d nginx certbot
+# 2. Recreate nginx (reload loop) + start the renewal loop + the email alarm
+docker compose -f docker-compose.prod.yml up -d nginx certbot cert-monitor
 
-# 3. Force an immediate renewal (don't wait up to 12h). --force-renewal because
-#    an already-expired cert may need a nudge; webroot is served by nginx above.
-docker compose -f docker-compose.prod.yml run --rm --entrypoint \
-  "certbot renew --webroot -w /var/www/certbot --force-renewal" certbot
+# 3. Force an immediate renewal (don't wait for the daily loop). --force-renewal
+#    because an already-expired cert needs a nudge; webroot is served by nginx.
+#    Note the `--entrypoint sh ... -c "..."` form — `--entrypoint` takes a single
+#    executable, so the certbot command goes in the sh -c string.
+docker compose -f docker-compose.prod.yml run --rm --entrypoint sh certbot \
+  -c "certbot renew --webroot -w /var/www/certbot --force-renewal"
 
-# 4. Reload nginx now (don't wait up to 6h)
+# 4. Reload nginx now (don't wait for the daily reload)
 docker exec prism-nginx nginx -s reload
 
 # 5. Verify — expiry should now be ~90 days out
@@ -122,8 +124,8 @@ echo | openssl s_client -connect prism.thequantsoft.co.in:443 \
 
 ```bash
 # All certs + expiry, straight from certbot
-docker compose -f docker-compose.prod.yml run --rm --entrypoint \
-  "certbot certificates" certbot
+docker compose -f docker-compose.prod.yml run --rm --entrypoint sh certbot \
+  -c "certbot certificates"
 
 # Is the renewal loop alive?
 docker logs prism-certbot --tail 20
@@ -147,10 +149,10 @@ once via webroot (nginx must be up to serve the challenge):
 ```bash
 for d in "thequantsoft.co.in -d www.thequantsoft.co.in" \
          "prism.thequantsoft.co.in" "api.thequantsoft.co.in"; do
-  docker compose -f docker-compose.prod.yml run --rm --entrypoint \
-    "certbot certonly --webroot -w /var/www/certbot -d ${d} \
-     --cert-name ${d%% *} --non-interactive --agree-tos \
-     -m praveen.kumar@thequantsoft.co.in --force-renewal" certbot
+  docker compose -f docker-compose.prod.yml run --rm --entrypoint sh certbot \
+    -c "certbot certonly --webroot -w /var/www/certbot -d ${d} \
+        --cert-name ${d%% *} --non-interactive --agree-tos \
+        -m praveen.kumar@thequantsoft.co.in --force-renewal"
 done
 docker exec prism-nginx nginx -s reload
 ```

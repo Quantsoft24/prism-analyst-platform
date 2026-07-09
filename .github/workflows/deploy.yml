@@ -47,7 +47,21 @@ jobs:
             docker compose -f docker-compose.prod.yml build landing
 
             echo "🚀 Restarting services..."
-            docker compose -f docker-compose.prod.yml up -d frontend landing nginx
+            docker compose -f docker-compose.prod.yml up -d frontend landing nginx cert-monitor
+
+            # ── TLS: renew any due/expired cert, then start the renewal loop ──
+            # `certbot renew` is idempotent — a no-op unless a cert is within 30
+            # days of expiry, so it's safe on every deploy. Run as a one-shot
+            # (before the loop service starts) to avoid two certbot processes
+            # contending for the /etc/letsencrypt lock, then reload nginx so a
+            # freshly-renewed cert is served immediately. Non-fatal: a cert hiccup
+            # must not block a frontend deploy.
+            echo "🔒 Ensuring TLS certificates are current..."
+            docker compose -f docker-compose.prod.yml run --rm --entrypoint sh certbot \
+              -c "certbot renew --webroot -w /var/www/certbot" \
+              || echo "⚠️ certbot renew reported an issue — check 'docker logs' / docs/TLS_CERTS.md"
+            docker exec prism-nginx nginx -s reload || true
+            docker compose -f docker-compose.prod.yml up -d certbot
 
             echo "⏳ Waiting for services to start..."
             sleep 15
