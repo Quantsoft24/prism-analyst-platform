@@ -20,8 +20,14 @@ It opens a TLS handshake to the nginx container (``CERT_ALERT_CONNECT_HOST``,
 default ``nginx`` on the compose network) using each public hostname as the SNI,
 and reads the served cert's ``notAfter``. Connecting to nginx directly (not the
 public DNS name) avoids NAT hairpin issues and reflects exactly what nginx
-serves after its reload. Verification is disabled so an already-expired cert can
-still be inspected. Pure stdlib — no pip installs.
+serves after its reload. Pure stdlib — no pip installs.
+
+A **verifying** SSL context is required: with verification disabled Python's
+``getpeercert()`` returns an EMPTY dict (no ``notAfter``), which would make every
+check fail and fire a false alarm. Verifying also strengthens the check — it
+validates the chain and hostname of what nginx actually serves. An expired or
+otherwise invalid cert makes the handshake raise ``SSLCertVerificationError``,
+which is exactly the condition we alert on (handled in ``check_all``).
 
 Config (all via env; SMTP_* come from the shared landing .env)
 --------------------------------------------------------------
@@ -54,14 +60,22 @@ def _env(name: str, default: str = "") -> str:
 
 def days_until_expiry(sni_host: str, connect_host: str, connect_port: int) -> tuple[int, dt.datetime]:
     """Return (days_left, expiry_utc) for the cert nginx serves for ``sni_host``.
-    Raises on any connection/parse failure so the caller can alert on it."""
-    ctx = ssl._create_unverified_context()  # noqa: SLF001 — must read expired certs too
+
+    Uses a VERIFYING context — see the module docstring. An unverified context
+    yields an empty ``getpeercert()`` dict and would break this entirely.
+    Raises ``ssl.SSLCertVerificationError`` on an expired/invalid cert, or a
+    generic exception on connection failure; the caller alerts on both."""
+    ctx = ssl.create_default_context()
     with socket.create_connection((connect_host, connect_port), timeout=10) as sock:
         with ctx.wrap_socket(sock, server_hostname=sni_host) as tls:
             cert = tls.getpeercert()
-    # notAfter looks like "Jul  8 17:18:07 2026 GMT"
-    expiry = dt.datetime.strptime(cert["notAfter"], "%b %d %H:%M:%S %Y %Z")
-    days = (expiry - dt.datetime.utcnow()).days
+    if not cert or "notAfter" not in cert:
+        raise RuntimeError("server returned no parseable certificate")
+    # notAfter looks like "Jul  8 17:18:07 2026 GMT" — always UTC/GMT.
+    expiry = dt.datetime.strptime(cert["notAfter"], "%b %d %H:%M:%S %Y %Z").replace(
+        tzinfo=dt.timezone.utc
+    )
+    days = (expiry - dt.datetime.now(dt.timezone.utc)).days
     return days, expiry
 
 
@@ -76,6 +90,13 @@ def check_all() -> list[str]:
     for host in hosts:
         try:
             days, expiry = days_until_expiry(host, connect_host, connect_port)
+        except ssl.SSLCertVerificationError as exc:
+            # A verifying handshake fails on an EXPIRED (or otherwise invalid)
+            # cert — that's precisely what we want to shout about.
+            kind = "has EXPIRED" if "expired" in str(exc).lower() else "is INVALID"
+            alerts.append(f"⚠️  {host} certificate {kind} — {exc}")
+            print(f"[cert-monitor] {host}: {kind}: {exc}", flush=True)
+            continue
         except Exception as exc:  # noqa: BLE001 — any failure is itself alert-worthy
             alerts.append(f"❌ {host}: could NOT read certificate ({exc})")
             print(f"[cert-monitor] {host}: read failed: {exc}", flush=True)
