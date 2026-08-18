@@ -16,10 +16,10 @@ app.use(express.json());
 // Serve static files from the root directory
 app.use(express.static(__dirname));
 
-// Default route to serve Home.html
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'Home.html'));
-});
+// Page routes (new PRISM site)
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'landing.html')));
+app.get('/blog', (req, res) => res.sendFile(path.join(__dirname, 'blog.html')));
+app.get('/blog-post', (req, res) => res.sendFile(path.join(__dirname, 'blog-post.html')));
 
 // Expose configuration securely to frontend
 app.get('/config.js', (req, res) => {

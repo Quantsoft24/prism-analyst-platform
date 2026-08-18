@@ -32,7 +32,7 @@ Before promoting this release to `production`, confirm:
    **cross-repo dependency** (frontend ships the UI; the backend must ship the
    schema). Verify after deploy:
    ```bash
-   ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145 \
+   ssh -i ~/.ssh/prism-analyst.pem ubuntu@13.204.236.177 \
      "docker exec prism-backend alembic current"   # expect 0019_chat_share
    ```
    ⚠️ **One-time caution:** a reverted Phase-7 `0019_agent_run_parent` was deleted
@@ -57,7 +57,7 @@ Before promoting this release to `production`, confirm:
 
 ## Architecture overview
 
-**Five containers** on a single EC2 host (`ubuntu@15.207.146.145`),
+**Five containers** on a single EC2 host (`ubuntu@13.204.236.177`),
 orchestrated by `docker-compose.prod.yml` in this repo: landing, frontend,
 backend, **worker** (durable Portfolio-Builder backtests — no ports, reuses the
 backend image), and nginx.
@@ -176,7 +176,7 @@ via the `env_file:` directive in `docker-compose.prod.yml`. The file is
 
 ```bash
 # SSH into the EC2 host
-ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145
+ssh -i ~/.ssh/prism-analyst.pem ubuntu@13.204.236.177
 
 # Edit the file
 nano ~/PRISM/prism-analyst-services/.env
@@ -212,7 +212,7 @@ relevant routes 503, the rest of the app is fine):
 | Feature | Backend `.env` vars | Other |
 |---|---|---|
 | News & Sentiment (`/api/v1/news/*`) | `PRISM_NEWS_URL` | the GCP VM's :8001 firewall must allow the EC2 IP |
-| Stock Dashboard (`/api/v1/stocks/*`) | `INVESTMENT_DB_HOST/PORT/NAME/USER/PASSWORD`, `INVESTMENT_DB_SSL_MODE=require` | the **investment RDS security group must allow the EC2 IP** (15.207.146.145), else connect-timeout |
+| Stock Dashboard (`/api/v1/stocks/*`) | `INVESTMENT_DB_HOST/PORT/NAME/USER/PASSWORD`, `INVESTMENT_DB_SSL_MODE=require` | the **investment RDS security group must allow the EC2 IP** (13.204.236.177), else connect-timeout |
 | Regulatory Lens (`/api/v1/regulatory/*`) | SEBI Postgres connection vars (read-only) | SEBI Postgres reachable from the EC2 IP |
 | Portfolio Builder backtests | primary DB (job queue) + investment RDS (prices) | the **`worker` container must be running** — same `.env`; else jobs stay `queued` |
 
@@ -269,7 +269,7 @@ finished and the bundle already contains whatever value the build saw.
 
 **Verify after deploy** the bundle contains the right value:
 ```bash
-ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145 \
+ssh -i ~/.ssh/prism-analyst.pem ubuntu@13.204.236.177 \
   "docker exec prism-frontend grep -roE 'https?://[^\"]+' .next/static/chunks/ | grep api.thequantsoft" | head -3
 ```
 
@@ -310,7 +310,7 @@ unreachable (e.g. a capped Neon project) and failing only if ALL are
 unreachable. You don't need to do anything. To verify on EC2:
 
 ```bash
-ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145 \
+ssh -i ~/.ssh/prism-analyst.pem ubuntu@13.204.236.177 \
   "docker exec prism-backend alembic current"
 ```
 
@@ -335,7 +335,7 @@ manual. **Before the deploy that introduces the risky change:**
 
 ```bash
 # Tag the running image as :previous
-ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145 \
+ssh -i ~/.ssh/prism-analyst.pem ubuntu@13.204.236.177 \
   "docker tag prism-analyst-platform-frontend:latest prism-analyst-platform-frontend:previous"
 ```
 
@@ -343,7 +343,7 @@ ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145 \
 
 ```bash
 # Re-tag :previous as :latest and restart
-ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145 << 'EOF'
+ssh -i ~/.ssh/prism-analyst.pem ubuntu@13.204.236.177 << 'EOF'
   cd ~/PRISM/prism-analyst-platform
   docker tag prism-analyst-platform-frontend:previous prism-analyst-platform-frontend:latest
   docker compose -f docker-compose.prod.yml up -d --no-build frontend
@@ -370,7 +370,7 @@ The deploy workflow now hard-resets to `origin/production` so this
 shouldn't happen anymore. If it does on an old workflow:
 
 ```bash
-ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145
+ssh -i ~/.ssh/prism-analyst.pem ubuntu@13.204.236.177
 cd ~/PRISM/prism-analyst-platform   # or prism-analyst-services
 git status                          # see what's modified
 git checkout .                      # discard ALL local changes
@@ -426,7 +426,7 @@ When something is broken in prod and the normal PR flow is too slow.
 
 ```bash
 # Step 1: SSH and apply the fix on EC2 to unblock
-ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145
+ssh -i ~/.ssh/prism-analyst.pem ubuntu@13.204.236.177
 cd ~/PRISM/prism-analyst-platform   # or services
 # ... edit the file ...
 docker compose -f docker-compose.prod.yml restart <service>
@@ -531,7 +531,7 @@ curl -sI "https://prism.thequantsoft.co.in/shared/<token>" | head -1
 # Expected: HTTP/1.1 200 OK  (NOT redirected to /sign-in)
 
 # 3c. Worker is running (else Portfolio-Builder backtests stay `queued`)
-ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145 \
+ssh -i ~/.ssh/prism-analyst.pem ubuntu@13.204.236.177 \
   "docker ps --filter name=prism-worker --format '{{.Names}} {{.Status}}'"
 # Expected: prism-worker  Up ...
 
@@ -635,7 +635,7 @@ down or never came up after a deploy (it has `depends_on: backend`, but a
 backend that failed its health check can leave the worker un-started).
 
 ```bash
-ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145
+ssh -i ~/.ssh/prism-analyst.pem ubuntu@13.204.236.177
 docker ps -a --filter name=prism-worker            # is it Up?
 cd ~/PRISM/prism-analyst-platform
 docker compose -f docker-compose.prod.yml logs worker --tail 100
@@ -808,7 +808,7 @@ Suggested order (cheapest-to-most-valuable):
 | `prism-analyst-services/.github/workflows/deploy.yml` | Backend deploy + alembic. |
 | `prism-analyst-services/.github/workflows/ci.yml` | Backend CI. |
 | EC2 host paths | `~/PRISM/prism-analyst-platform/`, `~/PRISM/prism-analyst-services/` |
-| EC2 SSH | `ssh -i ~/.ssh/prism-analyst.pem ubuntu@15.207.146.145` |
+| EC2 SSH | `ssh -i ~/.ssh/prism-analyst.pem ubuntu@13.204.236.177` |
 | EC2 SSL certs | `/etc/letsencrypt/` (host) — bind-mounted into nginx. |
 
 ---
