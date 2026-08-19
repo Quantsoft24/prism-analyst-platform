@@ -3,6 +3,7 @@ const cors = require('cors');
 const nodemailer = require('nodemailer');
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs');
 
 dotenv.config();
 
@@ -16,8 +17,20 @@ app.use(express.json());
 // Serve static files from the root directory
 app.use(express.static(__dirname));
 
+// Serve a page with .env-driven contact details injected (single source of truth = .env)
+function sendPage(res, file) {
+  fs.readFile(path.join(__dirname, file), 'utf8', (err, html) => {
+    if (err) return res.status(500).send('Error loading page');
+    html = html
+      .split('__QS_WHATSAPP__').join(process.env.WHATSAPP_NUMBER || '')
+      .split('__QS_EMAIL__').join(process.env.TARGET_EMAIL || '')
+      .split('__QS_LINKEDIN__').join(process.env.LINKEDIN_URL || '');
+    res.type('html').send(html);
+  });
+}
+
 // Page routes (new PRISM site)
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'landing.html')));
+app.get('/', (req, res) => sendPage(res, 'landing.html'));
 app.get('/blog', (req, res) => res.sendFile(path.join(__dirname, 'blog.html')));
 app.get('/blog-post', (req, res) => res.sendFile(path.join(__dirname, 'blog-post.html')));
 app.get(/^\/blog\/([A-Za-z0-9-]+)\/?$/, (req, res) => {
@@ -30,6 +43,7 @@ app.get('/config.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.send(`window.QS_CONFIG = { 
     EMAIL: "${process.env.TARGET_EMAIL || ''}",
+    WHATSAPP_NUMBER: "${process.env.WHATSAPP_NUMBER || ''}",
     COMPANY_NAME: "${process.env.COMPANY_NAME || 'QUANTSOFT'}",
     LINKEDIN_URL: "${process.env.LINKEDIN_URL || ''}",
     LINKEDIN_HANDLE: "${process.env.LINKEDIN_HANDLE || ''}",
